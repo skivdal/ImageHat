@@ -15,13 +15,5 @@ MARKER_SEGMENTS_JPEG = {
     b"\xFF\xD9": "EOI (End of Image)"
 }
 
-MARKER_SEGMENTS_JPEG_REV = {(v,k) for k,v in MARKER_SEGMENTS_JPEG.items()}
+#MARKER_SEGMENTS_JPEG_REV = {(v,k) for k,v in MARKER_SEGMENTS_JPEG.items()}
 
-# def hex_to_deciaml(hex_maker):
-#     byte1 = k[0]
-#     byte2 = k[1]
-#     return (byte1*256)+byte2
-
-# for k,v in MARKER_SEGMENTS_JPEG.items():
-#     dec_val = hex_to_deciaml(k)
-#     print(f"Marker: {k.hex().upper()}, Deciaml: {dec_val}")
