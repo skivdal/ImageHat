@@ -3,6 +3,7 @@
 
 MARKER_SEGMENTS_JPEG = {
     b"\xFF\xD8": "SOI (Start of Image)",
+    b"\xFF\xE0": "APP0 (JFIF Application Marker)",
     b"\xFF\xE1": "APP1 (EXIF Application Marker)",
     b"\xFF\xDB": "DQT (Define Quantization Table)",
     b"\xFF\xC4": "DHT (Define Huffman Table)",

@@ -163,3 +163,7 @@ cython_debug/
 
 data/
 tests/
+libexif/
+image_hat/
+exiftool-12.96_64/
+excluded_data/

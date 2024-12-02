@@ -16,24 +16,35 @@ SIGNED_RATIONAL = 10 # Two SIGNED_LONGs values. 64-bits in total (32 + 32).
 FLOAT = 11 # A 32-bit single-precision floating-point number. 
 DOUBLE = 12 # A 64-bit double-precision floating-point number.
 UTF_8 = 129 # An 8-bit integer representing a string according to UTF-8
-UNDEFINED = 0 # Type not defined.
 SHORT_OR_LONG = [SHORT, LONG]
 ASCII_OR_UTF_8 = [ASCII, UTF_8]
-ANY = [BYTE, ASCII, SHORT, LONG, RATIONAL, SIGNED_BYTE, UNDEFINED, SINGED_SHORT, SIGNED_LONG, SIGNED_RATIONAL, FLOAT, DOUBLE, UTF_8, UNDEFINED]
+ANY = [BYTE, ASCII, SHORT, LONG, RATIONAL, SIGNED_BYTE, UNDEFINED, SINGED_SHORT, SIGNED_LONG, SIGNED_RATIONAL, FLOAT, DOUBLE, UTF_8]
 
-SIZES = {
-    
+TYPE_SIZE_BYTES = {
+    BYTE:1,
+    ASCII:1,
+    SHORT:2,
+    LONG:4,
+    RATIONAL:8,
+    SIGNED_BYTE:1,
+    UNDEFINED:1,
+    SINGED_SHORT:2,
+    SIGNED_LONG:4, 
+    SIGNED_RATIONAL:8,
+    FLOAT:4,
+    DOUBLE:8,
+    UTF_8:1
 }
 
 
 
-# Recording Notation Level
-ACCESABILITY_NOTATION = {
-    "M":"Mandatory",
-    "R":"Recommended",
-    "O":"Optional",
-    "N":"It is not allowed to record"     
-}
+# # Recording Notation Level
+# ACCESABILITY_NOTATION = {
+#     "M":"Mandatory",
+#     "R":"Recommended",
+#     "O":"Optional",
+#     "N":"It is not allowed to record"     
+# }
 
 
 
