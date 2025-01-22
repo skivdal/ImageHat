@@ -2,9 +2,7 @@
 
 # Note that .WebP might be difficult to capture valuble header information from as it might use other metadata standards
 
-
-
-VALID_FORMATS = [
+FORMATS = [
     ".NEF", 
     ".TIFF", 
     ".WebP", 
@@ -12,9 +10,17 @@ VALID_FORMATS = [
     ".JPEG",
     ".JPG", 
     ".JPE",
-    ".JIF", 
     ".JFIF", 
     ".JFI", 
-    ".RAW"
+    ".RAW",
+    ".MP4"
+    ".MOV"
+    ]
+
+VALID_FORMATS = [
+    ".JPEG",
+    ".JPG",
+    ".MP4",
+    ".MOV"
 ]
 

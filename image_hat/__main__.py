@@ -1,24 +1,16 @@
-import os, os.path, tkinter
-from jpeg_marker_information import MARKER_SEGMENTS_JPEG
+import os, os.path
+import io, struct 
+from constants import MARKER_SEGMENTS_JPEG_NAME, MARKER_SEGMENTS_JPEG_ADDRESS
 from valid_formats import VALID_FORMATS
 from tag_support_levels import *
-import pandas as pd
-import io, struct 
+from output_structure import DATA_STRUCT
+
 
 class ImageHat():
 
     def __init__(self, img_path):
-        if not isinstance(img_path, str):
-            raise TypeError("Not valid type, must be string.")
-        
-        if not os.path.exists(img_path):
-            raise FileNotFoundError(f"The file '{img_path}' does not exist.")
-        
-        _, ext = os.path.splitext(img_path)
-        if ext.upper() not in VALID_FORMATS:
-            raise ValueError(f"Invalid file type '{ext}'. Supported types: {', \n'.join(VALID_FORMATS)}.")
-        
         self.img_path = img_path # stores the image adress / path
+        self.validate_file_path()
         self.binary_image = self.get_binary_data()
 
 
@@ -32,92 +24,106 @@ class ImageHat():
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    
-
-    
+        
+    def validate_file_path(self):
+        if not isinstance(self.img_path, str):
+            raise TypeError("Not valid type, must be string.")
+        
+        if not os.path.exists(self.img_path):
+            raise FileNotFoundError(f"The file '{self.img_path}' does not exist.")
+        
+        _, ext = os.path.splitext(self.img_path)
+        if ext.upper() not in VALID_FORMATS:
+            raise ValueError(f"Invalid file type '{ext}'. Supported types: {', \n'.join(VALID_FORMATS)}.")
 
     def verify_type_image(self):
         try:
-            if b"\xFF\xD8" in self.binary_image and b"\xFF\xC0" in self.binary_image:
+            if MARKER_SEGMENTS_JPEG_NAME["APP0"] in self.binary_image and b"\xFF\xC0" in self.binary_image:
                 print("This file contains valid EXIF- or TIFF-structured metadata")
         except Exception as e:
             raise ValueError(f"Binary image data is corrupted: {e}.\n\n Are you sure this is a valid file?")
 
-
-    def find_exif_bytes(self, pattern=b"    0"):
-        """
-        Searches for a specific EXIF byte pattern in the binary image data.
-        """
-        if pattern in self.binary_image:
-            location = self.binary_image.find(pattern)
-            return f"EXIF bytes found at: {location}"
-        else:
-            return ("EXIF bytes not found.")
-    
-
-
-
-
-
     def __str__(self):
-        inp = str(input("Are you sure you want a binary string representation of the image?\nThis may be a bad idea.\n"
-                    "Press yes or no [y/n]: "))
-        match inp:
-            case "y":
-                print(self.binary_image)
-            case "n":
-                pass
+        return f"ImageHat: {self.img_path}, Size: {len(self.binary_image)} bytes"
+    
+    def show_data(self):
+        print(self.binary_image)
+
+    def help(self):
+        print("""
+        ImageHat Class:
+        - Load and analyze binary image files for metadata.
+        - Supported Methods:
+            - verify_type_image: Checks for valid EXIF or TIFF metadata structure.
+            - extract_tags: Extract specific tags and their values from the image.
+            - summarize_metadata: Prints a summary of extracted metadata.
+        """)
+
+    def find_app1_segment(self):
+        """
+        Locate the APP1 segment in the binary image data and return its position and size.
+        """
+        app1_marker = b"\xFF\xE1"  # APP1 marker
+        exif_identifier = b"Exif\x00\x00"  # EXIF identifier string (ASCII)
+
+        # Find all occurrences of the APP1 marker
+        app1_positions = self.find_occurrences(app1_marker)
+
+        if not app1_positions:
+            return "No APP1 segment found in the image."
+
+        # Check for the EXIF identifier following each APP1 marker
+        for pos in app1_positions:
+            # Extract the APP1 segment length (next 2 bytes after the marker)
+            length_bytes = self.binary_image[pos + 2:pos + 4]
+            if len(length_bytes) < 2:
+                continue  # Skip invalid APP1 segment
+
+            # Convert the length to an integer (big-endian format)
+            segment_length = int.from_bytes(length_bytes, byteorder="big")
+
+            # Check if EXIF identifier exists in the segment
+            segment_data = self.binary_image[pos:pos + segment_length]
+            if exif_identifier in segment_data:
+                return {
+                    "start_position": pos,
+                    "length": segment_length,
+                    "segment_data": segment_data,
+                }
+
+        return "APP1 marker(s) found, but no EXIF identifier present."
+    
+    def find_jpeg_markers(self):
+        markers = {
+            "SOI": b"\xFF\xD8",
+            "APP0": b"\xFF\xE0",
+            "APP1": b"\xFF\xE1",
+            "DQT": b"\xFF\xDB",
+            "SOF0": b"\xFF\xC0",
+            "SOS": b"\xFF\xDA",
+            "EOI": b"\xFF\xD9",
+        }
+        found_markers = {}
+        for name, marker in markers.items():
+            pos = self.binary_image.find(marker)
+            if pos != -1:
+                found_markers[name] = pos
+        return found_markers
 
 
 
 
 
-#file_path = r"data\imgs\r012d1dbet.NEF" 
-file_path = r"data/imgs/IMG_4304.HEIC"
-#file_path = r"C:\Users\saete\OneDrive\Skrivebord\archive\data\dogs\dog.2.jpg"
-raw = ImageHat(file_path)
-# print(raw.img_path)
-# print(ImageHat.known_markers)
-# raw.verify_type_image()
+#file_path = r"data/imgs/IMG_4304.HEIC"
+# file_path = r"excluded_data\archive\Dresden_Exp\Nikon_D70\Nikon_D70_0_19445.JPG"
+file_path1 = r"excluded_data\archive\Dresden_Exp\Sony_DSC_W170\Sony_DSC-W170_0_50879.JPG"
+raw = ImageHat(file_path1)
 
-#ex = dict(list(TIFF_SPECIFIC_ATTRIBS.items())[:10])
-ex = dict(list(EXIF_IFD_ATTRIB_INFO_1.items())[:10])
-print(ex, "\n")
 
-tag_positions = {}
+markers = raw.find_jpeg_markers()
+for name, pos in markers.items():
+    print(f"{name} found at offset: {hex(pos)}")
 
-# Loop through each tag in TIFF_SPECIFIC_ATTRIBS
-for tag, properties in ex.items():
-    hex_value = properties["Hex"]
-    tag_positions[tag] = []
-    print(properties)
-
-    # Determine the byte size of the tag data based on its type and count
-    data_type = properties["Type"]
-    try:
-        data_length = TYPE_SIZE_BYTES[data_type]
-    except TypeError as e:
-        data_length = TYPE_SIZE_BYTES[max(data_type)]
-
-    # Search for all occurrences of the hex value in the binary image data
-    start = 0
-    while start < len(raw.binary_image):
-        pos = raw.binary_image.find(hex_value, start)
-        if pos == -1:
-            break  # No more occurrences found
-
-        # Append the position and calculate the data following the tag
-        data_start = pos + len(hex_value)
-        tag_positions[tag].append((pos, raw.binary_image[data_start:data_start + data_length]))
-        
-        start = pos + len(hex_value)  # Move past this occurrence
-
-# Filter out tags that were not found
-tag_positions = {tag: positions for tag, positions in tag_positions.items() if positions}
-
-print("\n\n")
-for k,v in tag_positions.items():
-    print(k,len(v))
 
 
 print(raw.binary_image.find(b"\xFF\xE1"))
@@ -125,53 +131,29 @@ count = raw.binary_image.count(b"\xFF\xE1")
 print(count)
 
 print(raw.binary_image.find(b"\x45\x78\x69\x66\x00\x00"))
-# if b"\xFF\xE1" in raw.binary_image:
-#     app1_start = raw.binary_image.find(b"\xff\xe1") # binary loc of APP1 segment
-#     print(raw.binary_image[app1_start:app1_start+10])
 
-
-# def hex_to_ascii(hex_string):
-#     return bytes.fromhex(hex_string).decode('utf-8')
-
-# li = []
-
-# # Iterate through the entire binary image, one byte at a time
-# for i in range(len(raw.binary_image) - 9):  # Stop 9 bytes before the end to avoid index out of range
-#     if raw.binary_image[i:i + 2] == b"EXIF":  # Check for the byte sequence "\x49\x49"
-#         li.append(i)  # Append the index where the sequence was found
 app1_marker = b"\xFF\xE1"
 exif_identifier = b"\x45\x78\x69\x66\x00\x00"
 
-app1_positions = []
-start = 0
-while start < len(raw.binary_image):
-    pos = raw.binary_image.find(app1_marker, start)
-    if pos == -1:
-        break
-    app1_positions.append(pos)
-    start = pos + len(app1_marker)
+# app1_positions = []
+# start = 0
+# while start < len(raw.binary_image):
+#     pos = raw.binary_image.find(app1_marker, start)
+#     if pos == -1:
+#         break
+#     app1_positions.append(pos)
+#     start = pos + len(app1_marker)
 
-# Find the position of the identifier
-identifier_pos = raw.binary_image.find(exif_identifier)
+# # Find the position of the identifier
+# identifier_pos = raw.binary_image.find(exif_identifier)
 
-# Determine which APP1 marker comes closest after the identifier
-closest_app1_after_identifier = None
-for pos in app1_positions:
-    if pos > identifier_pos:
-        closest_app1_after_identifier = pos
-        break  # Stop at the first APP1 marker after the identifier
+# # Determine which APP1 marker comes closest after the identifier
+# closest_app1_after_identifier = None
+# for pos in app1_positions:
+#     if pos > identifier_pos:
+#         closest_app1_after_identifier = pos
+#         break  # Stop at the first APP1 marker after the identifier
 
-# Print results
-if identifier_pos != -1:
-    print(f"Identifier found at position: {identifier_pos}")
-else:
-    print("Identifier not found.")
+# seg = raw.binary_image.find(app1_marker)
+# print(raw.binary_image[seg:seg+12])
 
-if closest_app1_after_identifier:
-    print(f"First APP1 marker after identifier is at position: {closest_app1_after_identifier}")
-else:
-    print("No APP1 marker found after the identifier.")
-
-
-seg = raw.binary_image.find(app1_marker)
-print(raw.binary_image[seg:seg+12])
