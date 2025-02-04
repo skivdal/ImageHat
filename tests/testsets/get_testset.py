@@ -3,6 +3,8 @@ import random
 import shutil
 
 # Define the path to the test set folder
+# NOTE: change base_folder to whatever you like, but be sure to locate within tests folder
+# also NOTE: I have downloaded the Dresden Image Dataset. You can find it here https://www.kaggle.com/datasets/micscodes/dresden-image-database.
 base_folder = r"dataset\archive\Dresden_Exp"
 
 # Define the destination folder for the selected images
@@ -18,7 +20,7 @@ for folder_name in os.listdir(base_folder):
         # Get all image files in the folder
         image_files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
 
-        # Select 10 random images or all if less than 10
+        # Select 1 random images or all if less than 1, change if needed
         selected_files = random.sample(image_files, min(len(image_files), 1))
 
         # Copy selected images to the output folder

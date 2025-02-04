@@ -1,6 +1,6 @@
 # Layout of structure
 
-DATA_STRUCT = {
+OUTPUT_STRUCTURE = {
     "name":None, # name of metadata / marker segment
     "markups":None, # beginning and end of marker
     "type":None, 

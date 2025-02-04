@@ -1,9 +1,9 @@
 import os, os.path
 import io, struct 
-from constants import *
-from valid_formats import VALID_FORMATS
-from tag_support_levels import *
-from output_structure import DATA_STRUCT
+from imagehat.constants import *
+from imagehat.tag_support_levels import *
+from imagehat.valid_formats import VALID_FORMATS
+from imagehat.output_structure import OUTPUT_STRUCTURE
 
 
 class ImageHat():
@@ -30,7 +30,7 @@ class ImageHat():
             raise TypeError("Not valid type, must be string.")
         
         if not os.path.exists(self.img_path):
-            raise FileNotFoundError(f"The file '{self.img_path}' does not exist.")
+            raise FileNotFoundError(f"The file '{self.img_path}' does not exist or is located elsewhere.")
         
         _, ext = os.path.splitext(self.img_path)
         if ext.upper() not in VALID_FORMATS:

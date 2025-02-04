@@ -165,4 +165,4 @@ dataset/
 libexif/
 exiftool-12.96_64/
 candidates/
-image_hat/tests/testsets/testset-large/
+tests/testsets/testset-large/
