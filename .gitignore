@@ -166,3 +166,4 @@ libexif/
 exiftool-12.96_64/
 candidates/
 tests/testsets/testset-large/
+tests
