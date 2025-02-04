@@ -161,9 +161,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-data/
-tests/
+dataset/
 libexif/
-image_hat/
 exiftool-12.96_64/
 candidates/
+image_hat/tests/testsets/testset-large/

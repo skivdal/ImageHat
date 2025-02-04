@@ -1,6 +1,6 @@
 import os, os.path
 import io, struct 
-from constants import MARKER_SEGMENTS_JPEG_NAME, MARKER_SEGMENTS_JPEG_ADDRESS
+from constants import *
 from valid_formats import VALID_FORMATS
 from tag_support_levels import *
 from output_structure import DATA_STRUCT
@@ -14,7 +14,7 @@ class ImageHat():
         self.binary_image = self.get_binary_data()
 
 
-    def get_binary_data(self):
+    def get_binary_data(self) -> bytes:
         try:
             with open(self.img_path, "rb") as binary_image:
                 binary_content = binary_image.read()
@@ -43,13 +43,13 @@ class ImageHat():
         except Exception as e:
             raise ValueError(f"Binary image data is corrupted: {e}.\n\n Are you sure this is a valid file?")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ImageHat: {self.img_path}, Size: {len(self.binary_image)} bytes"
     
-    def show_data(self):
+    def show_data(self) -> None:
         print(self.binary_image)
 
-    def help(self):
+    def help(self) -> None:
         print("""
         ImageHat Class:
         - Load and analyze binary image files for metadata.
@@ -93,19 +93,10 @@ class ImageHat():
 
         return "APP1 marker(s) found, but no EXIF identifier present."
     
-    def find_jpeg_markers(self):
-        markers = {
-            "SOI": b"\xFF\xD8",
-            "APP0": b"\xFF\xE0",
-            "APP1": b"\xFF\xE1",
-            "DQT": b"\xFF\xDB",
-            "SOF0": b"\xFF\xC0",
-            "SOS": b"\xFF\xDA",
-            "EOI": b"\xFF\xD9",
-        }
+    def find_jpeg_segments(self) -> dict:
         found_markers = {}
-        for name, marker in markers.items():
-            pos = self.binary_image.find(marker)
+        for addr, name in MARKER_SEGMENTS_JPEG_ADDRESS.items():
+            pos = self.binary_image.find(addr)
             if pos != -1:
                 found_markers[name] = pos
         return found_markers
@@ -116,44 +107,52 @@ class ImageHat():
 
 #file_path = r"data/imgs/IMG_4304.HEIC"
 # file_path = r"excluded_data\archive\Dresden_Exp\Nikon_D70\Nikon_D70_0_19445.JPG"
-file_path1 = r"excluded_data\archive\Dresden_Exp\Sony_DSC_W170\Sony_DSC-W170_0_50879.JPG"
-raw = ImageHat(file_path1)
+# file_path = r"dataset\archive\Dresden_Exp\Sony_DSC_W170\Sony_DSC-W170_0_50879.JPG"
+# raw = ImageHat(file_path)
+# print(len(raw.binary_image))
+
+# markers = raw.find_jpeg_segments()
+# for name, pos in markers.items():
+#     print(f"{name} found at offset: {(pos)}")
 
 
-markers = raw.find_jpeg_markers()
-for name, pos in markers.items():
-    print(f"{name} found at offset: {hex(pos)}")
+# print("APP1 segment marker address: ", raw.binary_image.find(b"\xFF\xE1"))
+# count = raw.binary_image.count(b"\xFF\xE1") 
+# print("Count of found APP1 markers: ", count)
+
+# exif_id_loc = raw.binary_image.find(EXIF_IDENTIFIER)
+# print("Location of exif identifier: ", exif_id_loc)
+file_path = r"dataset\archive\Dresden_Exp\Sony_DSC_W170\Sony_DSC-W170_0_50879.JPG"
+raw = ImageHat(file_path)
+
+# # Count occurrences of each marker
+# marker_counts = {marker.hex(): raw.binary_image.count(marker) for marker in MARKER_SEGMENTS_JPEG_ADDRESS}
+
+# # Print results
+# for marker, count in marker_counts.items():
+#     print(f"Marker {marker.upper()} found {count} times.")
 
 
 
-print(raw.binary_image.find(b"\xFF\xE1"))
-count = raw.binary_image.count(b"\xFF\xE1") 
-print(count)
+# Function to find all positions of a given marker
+def find_marker_positions(binary_data, marker):
+    positions = []
+    pos = binary_data.find(marker)  # Find first occurrence
+    while pos != -1:
+        positions.append(pos)
+        pos = binary_data.find(marker, pos + 1)  # Find next occurrence
+    return positions
 
-print(raw.binary_image.find(b"\x45\x78\x69\x66\x00\x00"))
+# Dictionary to store counts and positions
+marker_info = {}
 
-app1_marker = b"\xFF\xE1"
-exif_identifier = b"\x45\x78\x69\x66\x00\x00"
+for name, marker in MARKER_SEGMENTS_JPEG_NAME.items():
+    positions = find_marker_positions(raw.binary_image, marker)
+    marker_info[name] = {
+        "count": len(positions),
+        "positions": positions
+    }
 
-# app1_positions = []
-# start = 0
-# while start < len(raw.binary_image):
-#     pos = raw.binary_image.find(app1_marker, start)
-#     if pos == -1:
-#         break
-#     app1_positions.append(pos)
-#     start = pos + len(app1_marker)
-
-# # Find the position of the identifier
-# identifier_pos = raw.binary_image.find(exif_identifier)
-
-# # Determine which APP1 marker comes closest after the identifier
-# closest_app1_after_identifier = None
-# for pos in app1_positions:
-#     if pos > identifier_pos:
-#         closest_app1_after_identifier = pos
-#         break  # Stop at the first APP1 marker after the identifier
-
-# seg = raw.binary_image.find(app1_marker)
-# print(raw.binary_image[seg:seg+12])
-
+# Print results
+for marker, info in marker_info.items():
+    print(f"Marker {marker} found {info['count']} times at positions: {info['positions']}")
