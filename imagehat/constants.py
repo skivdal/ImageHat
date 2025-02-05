@@ -1,5 +1,5 @@
 # Information of all the applied markers segments found in .JPEG
-
+# NOTE: Both of these dicts are used. They are used in different situations and for testing.
 
 MARKER_SEGMENTS_JPEG_NAME = {
     "SOI" : b"\xFF\xD8", # (Start of Image)
@@ -31,9 +31,13 @@ MARKER_SEGMENTS_JPEG_ADDRESS = {
     b"\xFF\xD9": "EOI"   # (End of Image)
 }
 
-EXIF_IDENTIFIER = b"\x45\x78\x69\x66\x00\x00"
-
-EXIF_DATA = {}
+#
+EXIF_TIFF_IDS = {
+    "app1_marker": b"\xFF\xE1",
+    "full_exif_identifier": b"\x45\x78\x69\x66\x00\x00", # "Exif\0\0"
+    "exif_identifier": b"\x45\x78\x69\x66", # HEX representation of EXIF in ASCII
+    "tiff_magic_number": [b"\x00\x2A"] # An em
+}
 
 
 
