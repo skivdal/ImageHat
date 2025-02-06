@@ -32,11 +32,13 @@ MARKER_SEGMENTS_JPEG_ADDRESS = {
 }
 
 #
-EXIF_TIFF_IDS = {
-    "app1_marker": b"\xFF\xE1",
-    "full_exif_identifier": b"\x45\x78\x69\x66\x00\x00", # "Exif\0\0"
+IDENTIFIERS = {
+    "full_exif_identifier": b"\x45\x78\x69\x66\x00\x00", # "Exif\0\0", including the following NULL value and padding
     "exif_identifier": b"\x45\x78\x69\x66", # HEX representation of EXIF in ASCII
-    "tiff_magic_number": [b"\x00\x2A"] # An em
+    "II": b"\x49\x49", # Intel byte order, LSB first
+    "MM": b"\x4D\x4D", # Motorola byte order, MSB first
+    "tiff_magic_number": b"\x00\x2A", # TIFF magic number verifies TIFF
+    "offset_first_ifd": b"\x08\x00\x00\x00"	
 }
 
 

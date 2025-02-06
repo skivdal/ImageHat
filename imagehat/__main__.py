@@ -44,7 +44,7 @@ class ImageHat():
         if not MARKER_SEGMENTS_JPEG_NAME["APP1"] in self.binary_repr:
             raise ValueError(f"Binary image does not contain Application Layer 1. No EXIF data found.")
 
-        if not EXIF_TIFF_IDS["EXIF_TIFF_IDS"] in self.binary_repr:
+        if not IDENTIFIERS["IDENTIFIERS"] in self.binary_repr:
             raise ValueError(f"Binary image does not contain an EXIF identifier.")
 
     def __str__(self) -> str:
@@ -69,41 +69,52 @@ class ImageHat():
             - summarize_metadata: Prints a summary of extracted metadata.
         """)
 
-    def get_app1_segment(self, app1_offset):
+    def read_app1_segment(self, app1_offset):
         """
         This method locates the APP1 segment in the binary image data and return its offset and size.
         """
         report = {}
 
-        # Find all infomration in the APP1 segment
-        app1_size = self.binary_repr[app1_offset+2:app1_offset+4]
-        report["app1_size"] = {app1_size:ImageHat.hex_to_decimal(app1_size)} 
-        exif_identifier = self.binary_repr.find(EXIF_TIFF_IDS["exif_identifier"])
-        return report
+        # Recording APP1 segment size (2 bytes, \xFF\xE1)
+        app1_size = ImageHat.hex_to_decimal(self.binary_repr[app1_offset+2:app1_offset+4]) # Size of APP1 segment in bytes
+        report["app1_size"] = app1_size # For latter, add failsafe if segment > 64 kb
 
-        if not app1_offset:
-            return "No APP1 segment found in the image."
+        # Recording start of APP1 segment
+        app1_location_start = self.binary_repr[app1_offset] 
+        report["start_of_app1"] = app1_location_start
 
-        # Check for the EXIF identifier following each APP1 marker
-        for pos in app1_positions:
-            # Extract the APP1 segment length (next 2 bytes after the marker)
-            length_bytes = self.binary_repr[pos + 2:pos + 4]
-            if len(length_bytes) < 2:
-                continue  # Skip invalid APP1 segment
+        # Recording end of APP1 segment
+        app1_location_end = self.binary_repr[app1_offset+app1_size]
+        report["end_of_app1"] = app1_location_end
 
-            # Convert the length to an integer (big-endian format)
-            segment_length = int.from_bytes(length_bytes, byteorder="big")
+        # Recording EXIF identifier (6 bytes) 
+        exif_identifier = self.binary_repr.find(IDENTIFIERS["exif_identifier"])
+        report["exif_identifier_loc"] = exif_identifier
 
-            # Check if EXIF identifier exists in the segment
-            segment_data = self.binary_repr[pos:pos + segment_length]
-            if exif_identifier in segment_data:
-                return {
-                    "start_position": pos,
-                    "length": segment_length,
-                    "segment_data": segment_data,
-                }
+        # Recording byte order (2 bytes)
+        byte_order_loc = exif_identifier+6
+        byte_order = self.binary_repr[byte_order_loc:byte_order_loc+2]
+        endianness = "<" if byte_order == IDENTIFIERS["II"] else ">"
+        endianness_report = "II" if byte_order == IDENTIFIERS["II"] else "MM"
+        report["byte_order"] = endianness_report
 
-        return "APP1 marker(s) found, but no EXIF identifier present."
+        # Recording magic number (2 bytes)
+        magic_number_loc = byte_order_loc+2
+        magic_number_bytes = self.binary_repr[magic_number_loc:magic_number_loc + 2]  # Read raw bytes
+        magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
+        report["tiff_magic_number"] = magic_number_bytes
+
+        ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
+        ### Always unpack constants in big endian from project files. 
+        comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
+        if  magic_number != comp_magic_number:
+            report["tiff_valid"] = False
+        else: 
+            report["tiff_valid"] = True
+
+        # Extracting offset to first IDF (4 bytes)
+
+        return report, endianness
     
     def generate_report(self):
         """
@@ -125,13 +136,19 @@ class ImageHat():
         }
 
 
-        jpeg_marker_info = self.get_jpeg_segments()
+        jpeg_marker_info = self.read_jpeg_markers()
         report["jpeg_markers"] = jpeg_marker_info
 
         if jpeg_marker_info["APP1"]:
-            app1_info = self.get_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
+            app1_info, endianness = self.read_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
             report["app1_info"] = {
-                "size":app1_info["app1_size"]
+                "app1_size": app1_info["app1_size"],
+                "app1_start": app1_info["start_of_app1"],
+                "app1_end": app1_info["end_of_app1"],
+                "exif_identifier_loc": app1_info["exif_identifier_loc"],
+                "byte_order": app1_info["byte_order"],
+                "tiff_magic_number": app1_info["tiff_magic_number"],
+                "tiff_valid": app1_info["tiff_valid"]
             }
         else:
             return "No APP1 segment found in the image."        
@@ -139,13 +156,11 @@ class ImageHat():
 
         for k,v in report.items():
             print(k, ":" ,v)
+            print()
+        print(endianness)
         return report
 
-
-
-
-
-    def get_jpeg_segments(self) -> dict:
+    def read_jpeg_markers(self) -> dict:
         """
         Locate all JPEG markers in the binary image, count occurrences, 
         and return their offset.
@@ -171,25 +186,6 @@ class ImageHat():
                 }
 
         return marker_info
-    
-
-        
-    def detect_tiff_endianness(exif_data: bytes) -> str:
-        """
-        Detects whether EXIF/TIFF data inside a JPEG file is stored in Big-Endian or Little-Endian.
-        
-        Args:
-            exif_data (bytes): The first few bytes of the TIFF header.
-        
-        Returns:
-            str: "big" for Big-Endian, "little" for Little-Endian.
-        """
-        if exif_data[:2] == b"MM":  # "MM" → Big-Endian
-            return "big"
-        elif exif_data[:2] == b"II":  # "II" → Little-Endian
-            return "little"
-        else:
-            raise ValueError("Invalid TIFF byte order marker.")
     
     @classmethod    
     def hex_to_decimal(cls, byte_sequence: bytes, byteorder: str = 'big') -> int:
@@ -223,6 +219,7 @@ if __name__ == "__main__":
     file_path = r"dataset\archive\Dresden_Exp\Sony_DSC_W170\Sony_DSC-W170_0_50879.JPG"
     img = ImageHat(file_path)
     img.generate_report()
+    print(img.binary_repr[:30])
 
 
     # for marker,info in img.binary_repr.items():
@@ -234,7 +231,7 @@ if __name__ == "__main__":
 
     # img = img.binary_repr[:100]
 
-    # ei = img.find(EXIF_TIFF_IDS["exif_identifier"])
+    # ei = img.find(IDENTIFIERS["exif_identifier"])
     # locs = img[ei:ei+2+6]
     # print(ei, locs, "\n\n\n")
     # app1 = img.find(MARKER_SEGMENTS_JPEG_NAME["APP1"])
