@@ -56,18 +56,91 @@ class ImageHat():
         """
         print(self.binary_repr)
 
+    @staticmethod
     def help(self) -> None:
         """
-        A method 
+        Displays information about the ImageHat class and its available methods.
+
+        The ImageHat class is designed to analyze binary image files, extract metadata, 
+        and validate EXIF structures. It supports methods for reading JPEG markers, 
+        parsing EXIF data, and converting hex values.
+
+        Available Methods:
+        ------------------
+        
+        - show_data():
+            Prints extracted metadata in a human-readable format.
+
+        - validate_exif():
+            Checks if the image contains a valid EXIF structure.
+            Returns True if valid, otherwise False.
+
+        - validate_file_path():
+            Validates whether the provided file path exists and is accessible.
+            Raises an error if the path is invalid.
+
+        - get_binary_data() -> bytes:
+            Reads the image file in binary mode and returns the raw data.
+
+        - read_app1_segment(app1_offset):
+            Reads the APP1 (EXIF) segment from the JPEG file at the given offset.
+            Returns parsed EXIF data if present.
+
+        - read_exif_ifd(ifd_start, num_entries, tiff_header_offset, endianness):
+            Reads and extracts metadata from an EXIF Image File Directory (IFD).
+            Returns a dictionary of parsed EXIF tags.
+
+        - generate_report():
+            Compiles and returns a detailed report of extracted metadata.
+
+        - read_jpeg_markers() -> dict:
+            Identifies and extracts key JPEG markers (e.g., SOI, APP1, DQT, SOS).
+            Returns a dictionary mapping marker names to their offsets.
+
+        - hex_to_decimal(byte_sequence: bytes, byteorder: str = 'big') -> int:
+            Converts a byte sequence into an integer.
+            Supports 'big' and 'little' endian formats.
+            Returns the decimal representation of the byte sequence.
+
+        Example Usage:
+        --------------
+        >>> image = ImageHat("sample.jpg")
+        >>> image.validate_exif()
+        True
+        >>> binary_data = image.get_binary_data()
+        >>> print(binary_data[:10])  # Print first 10 bytes of the file
+        >>> markers = image.read_jpeg_markers()
+        >>> print(markers)
+        {'SOI': 0, 'APP1': 20, 'DQT': 100, 'SOS': 200}
+        
         """
+
         print("""
         ImageHat Class:
-        - Load and analyze binary image files for metadata.
-        - Supported Methods:
-            - verify_type_image: Checks for valid EXIF or TIFF metadata structure.
-            - extract_tags: Extract specific tags and their values from the image.
-            - summarize_metadata: Prints a summary of extracted metadata.
+        ----------------
+        A class for analyzing binary image files and extracting metadata.
+
+        Supported Methods:
+        - show_data(): Displays extracted metadata in a readable format.
+        - validate_exif(): Checks for a valid EXIF structure.
+        - validate_file_path(): Verifies if the provided file path exists.
+        - get_binary_data(): Reads the image file and returns raw binary data.
+        - read_app1_segment(app1_offset): Reads and parses the APP1 (EXIF) segment.
+        - read_exif_ifd(ifd_start, num_entries, tiff_header_offset, endianness): Extracts EXIF IFD metadata.
+        - generate_report(): Generates a detailed metadata report.
+        - read_jpeg_markers(): Extracts key JPEG markers and their positions.
+        - hex_to_decimal(byte_sequence, byteorder): Converts a byte sequence to an integer.
+
+        Example:
+        --------
+        image = ImageHat("sample.jpg")
+        image.validate_exif()
+        binary_data = image.get_binary_data()
+        markers = image.read_jpeg_markers()
+        print(markers)
         """)
+
+
 
     def read_app1_segment(self, app1_offset):
         """
@@ -79,43 +152,122 @@ class ImageHat():
         app1_size = ImageHat.hex_to_decimal(self.binary_repr[app1_offset+2:app1_offset+4]) # Size of APP1 segment in bytes
         report["app1_size"] = app1_size # For latter, add failsafe if segment > 64 kb
 
-        # Recording start of APP1 segment
+        # Recording start of APP1 segment 
         app1_location_start = self.binary_repr[app1_offset] 
         report["start_of_app1"] = app1_location_start
 
-        # Recording end of APP1 segment
+        # Recording end of APP1 segment 
         app1_location_end = self.binary_repr[app1_offset+app1_size]
         report["end_of_app1"] = app1_location_end
+        _0_TO_APP1 = self.binary_repr[:app1_location_end]
 
         # Recording EXIF identifier (6 bytes) 
-        exif_identifier = self.binary_repr.find(IDENTIFIERS["exif_identifier"])
-        report["exif_identifier_loc"] = exif_identifier
+        exif_identifier = _0_TO_APP1.find(IDENTIFIERS["exif_identifier"])
+        report["exif_identifier_offset"] = exif_identifier
 
-        # Recording byte order (2 bytes)
-        byte_order_loc = exif_identifier+6
-        byte_order = self.binary_repr[byte_order_loc:byte_order_loc+2]
-        endianness = "<" if byte_order == IDENTIFIERS["II"] else ">"
-        endianness_report = "II" if byte_order == IDENTIFIERS["II"] else "MM"
+        # Recording byte order (2 bytes) 
+        # Recoring endianness starts here. EXIF is big-endian until byte-order is discovered.
+        byte_order_offset = exif_identifier+6
+        byte_order_bytes = _0_TO_APP1[byte_order_offset:byte_order_offset+2]
+        endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
+        endianness_report = "II" if byte_order_bytes == IDENTIFIERS["II"] else "MM"
         report["byte_order"] = endianness_report
 
-        # Recording magic number (2 bytes)
-        magic_number_loc = byte_order_loc+2
-        magic_number_bytes = self.binary_repr[magic_number_loc:magic_number_loc + 2]  # Read raw bytes
+        # Recording magic number (2 bytes) 
+        magic_number_offset = byte_order_offset+2
+        magic_number_bytes = _0_TO_APP1[magic_number_offset:magic_number_offset + 2]  # Read raw bytes
         magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
         report["tiff_magic_number"] = magic_number_bytes
+        report["tiff_magic_number_offset"] = magic_number_offset
 
         ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
         ### Always unpack constants in big endian from project files. 
         comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
-        if  magic_number != comp_magic_number:
-            report["tiff_valid"] = False
-        else: 
-            report["tiff_valid"] = True
+        report["tiff_validity"] = magic_number == comp_magic_number
 
-        # Extracting offset to first IDF (4 bytes)
+        # Recording offset to first IDF (4 bytes)
+        ifd_offset_bytes = _0_TO_APP1[byte_order_offset+4:byte_order_offset+8]
+        ifd_start = byte_order_offset + struct.unpack(f"{endianness}I", ifd_offset_bytes)[0]
+        ifd_entries = struct.unpack(f"{endianness}H", _0_TO_APP1[ifd_start:ifd_start+2])[0]
+        report["first_ifd"] = ifd_offset_bytes
+        report["first_ifd_start"] = ifd_start
+        report["first_ifd_entries"] = ifd_entries
 
-        return report, endianness
+
+        # Recording the EXIF tags. NOTE: Most important, do not touch.
+        exif_information = self.read_exif_ifd(ifd_start=ifd_start, 
+                                              num_entries=ifd_entries,
+                                              tiff_header_offset=byte_order_offset, 
+                                              endianness=endianness)
+        report["exif_info"] = exif_information
+
+
+        return report
     
+
+
+    # def find_exif_ifd_pointer(self, endianness, app1_segment):
+    #     """ Locates the Exif IFD Pointer (0x8769) inside the First IFD. """
+    #     ifd_pointer = b"\x87\x69"
+    #     ifd_pointer_le = struct.pack(f"{endianness}H", ImageHat.hex_to_decimal(ifd_pointer))
+    #     ifd_pointer_loc = app1_segment.find(ifd_pointer_le)
+
+    
+    #     return ifd_pointer_loc
+    
+
+    def read_exif_ifd(self, ifd_start, num_entries, tiff_header_offset, endianness):
+        """
+        Reads and extracts all Exif IFD entries.
+        """
+        report = {}
+
+        # This loop starts at the recorded start of the first ifd, 
+        # skips the 2 num_entries bytes, and iterates over each entry. 
+        exif_ifd_offset = None
+        for ent in range(num_entries):
+            entry_offset = ifd_start + 2 + (ent*12)
+            tag, datatype, count, value_offset = struct.unpack(f"{endianness}HHII", self.binary_repr[entry_offset:entry_offset+12])
+
+            if tag == 0x8769:  # Exif IFD Pointer
+                exif_ifd_offset = tiff_header_offset + value_offset
+                report["Exif IFD pointer found"] = bool(tag)
+                break
+        
+        if not exif_ifd_offset:
+            return "Exif IFD Pointer not found"
+        
+        # Read number of entries in Exif IFD
+        num_exif_entries = struct.unpack(f"{endianness}H", self.binary_repr[exif_ifd_offset:exif_ifd_offset + 2])[0]
+        report["Number of Exif Entries"] = num_exif_entries
+
+        # Extract key EXIF tags 
+        exif_data = {}
+        EXIF_TAGS_REVERSED = {v["tag"]: k for k, v in EXIF_TAGS_REV_1.items()}
+
+
+
+        for i in range(num_exif_entries):
+            entry_offset = exif_ifd_offset + 2 + (i * 12)
+            tag, datatype, count, value_offset = struct.unpack(f"{endianness}HHII", self.binary_repr[entry_offset:entry_offset+12])
+
+            tag_bytes = tag.to_bytes(2, byteorder="big")  # Convert integer tag to byte format
+
+            
+            if tag_bytes in EXIF_TAGS_REVERSED:  
+                if datatype == 2:  # ASCII string
+                    value_pos = tiff_header_offset + value_offset
+                    value = self.binary_repr[value_pos:value_pos + count].decode().strip('\x00')
+                elif datatype == 3:  # Short (2 bytes)
+                    value = value_offset & 0xFFFF  # Lower 2 bytes
+                else:
+                    value = value_offset  # Direct value for simple types
+                
+                # Map tag values to names
+                exif_data[EXIF_TAGS_REVERSED[tag_bytes]] = value 
+        report["exif_data"] = exif_data
+        return report
+        
     def generate_report(self):
         """
         Generates a thorough metadata report.
@@ -135,29 +287,15 @@ class ImageHat():
             "file_size_kbytes":f"{round(file_size/1024, 2)} kbs"
         }
 
-
         jpeg_marker_info = self.read_jpeg_markers()
         report["jpeg_markers"] = jpeg_marker_info
 
         if jpeg_marker_info["APP1"]:
-            app1_info, endianness = self.read_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
-            report["app1_info"] = {
-                "app1_size": app1_info["app1_size"],
-                "app1_start": app1_info["start_of_app1"],
-                "app1_end": app1_info["end_of_app1"],
-                "exif_identifier_loc": app1_info["exif_identifier_loc"],
-                "byte_order": app1_info["byte_order"],
-                "tiff_magic_number": app1_info["tiff_magic_number"],
-                "tiff_valid": app1_info["tiff_valid"]
-            }
+            app1_info = self.read_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
+            report["app1_info"] = app1_info
         else:
-            return "No APP1 segment found in the image."        
-            
-
-        for k,v in report.items():
-            print(k, ":" ,v)
-            print()
-        print(endianness)
+            return "No APP1 segment found in the image."
+        
         return report
 
     def read_jpeg_markers(self) -> dict:
@@ -218,23 +356,7 @@ class ImageHat():
 if __name__ == "__main__":
     file_path = r"dataset\archive\Dresden_Exp\Sony_DSC_W170\Sony_DSC-W170_0_50879.JPG"
     img = ImageHat(file_path)
-    img.generate_report()
-    print(img.binary_repr[:30])
-
-
-    # for marker,info in img.binary_repr.items():
-    #     print(f"Marker {marker} found {info['count']} times at offset: {info['offset']}")
-    # print("\n\n\n")
-
-
-
-
-    # img = img.binary_repr[:100]
-
-    # ei = img.find(IDENTIFIERS["exif_identifier"])
-    # locs = img[ei:ei+2+6]
-    # print(ei, locs, "\n\n\n")
-    # app1 = img.find(MARKER_SEGMENTS_JPEG_NAME["APP1"])
-    # app1s = img[app1+2:app1+4]
-    # print(ImageHat.hex_to_decimal(app1s))
+    report = img.generate_report()
+    for k,v in report["app1_info"]["exif_info"].items():
+        print(f"{k}: {v}")
 

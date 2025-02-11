@@ -2,7 +2,6 @@
 
 # Types related to tags according to the EXIF standard
 # These types are represented in bits/bytes
-
 BYTE = 1 # An 8-bit unsigned integer.
 ASCII = 2 # An 8-bit byte containing one 7-bit ASCII code. Final bute is terminated with NULL. 1 per character.
 SHORT = 3 # A 16-bit unsigned integer.
@@ -20,6 +19,7 @@ SHORT_OR_LONG = [SHORT, LONG]
 ASCII_OR_UTF_8 = [ASCII, UTF_8]
 ANY = [BYTE, ASCII, SHORT, LONG, RATIONAL, SIGNED_BYTE, UNDEFINED, SINGED_SHORT, SIGNED_LONG, SIGNED_RATIONAL, FLOAT, DOUBLE, UTF_8]
 
+
 TYPE_SIZE_BYTES = {
     BYTE:1,
     ASCII:1,
@@ -36,7 +36,76 @@ TYPE_SIZE_BYTES = {
     UTF_8:1
 }
 
+EXIF_TAGS_REV_1 = {
+    # A. Tags Relating to Version
+    "ExifVersion": {"tag": b"\x90\x00", "type": "UNDEFINED", "count": 4},
+    "FlashpixVersion": {"tag": b"\xA0\x00", "type": "UNDEFINED", "count": 4},
 
+    # B. Tag Relating to Image Data Characteristics
+    "ColorSpace": {"tag": b"\xA0\x01", "type": "SHORT", "count": 1},
+    "Gamma": {"tag": b"\xA5\x00", "type": "RATIONAL", "count": 1},
+
+    # C. Tags Relating to Image Configuration
+    "ComponentsConfiguration": {"tag": b"\x91\x01", "type": "UNDEFINED", "count": 4},
+    "CompressedBitsPerPixel": {"tag": b"\x91\x02", "type": "RATIONAL", "count": 1},
+    "PixelXDimension": {"tag": b"\xA0\x02", "type": "SHORT or LONG", "count": 1},
+    "PixelYDimension": {"tag": b"\xA0\x03", "type": "SHORT or LONG", "count": 1},
+
+    # D. Tags Relating to User Information
+    "MakerNote": {"tag": b"\x92\x7C", "type": "UNDEFINED", "count": "Any"},
+    "UserComment": {"tag": b"\x92\x86", "type": "UNDEFINED", "count": "Any"},
+
+    # E. Tag Relating to Related File Information
+    "RelatedSoundFile": {"tag": b"\xA0\x04", "type": "ASCII", "count": 13},
+
+    # F. Tags Relating to Date and Time
+    "DateTimeOriginal": {"tag": b"\x90\x03", "type": "ASCII", "count": 20},
+    "DateTimeDigitized": {"tag": b"\x90\x04", "type": "ASCII", "count": 20},
+    "OffsetTime": {"tag": b"\x90\x10", "type": "ASCII", "count": 7},
+    "OffsetTimeOriginal": {"tag": b"\x90\x11", "type": "ASCII", "count": 7},
+    "OffsetTimeDigitized": {"tag": b"\x90\x12", "type": "ASCII", "count": 7},
+    "SubSecTime": {"tag": b"\x92\x90", "type": "ASCII", "count": "Any"},
+    "SubSecTimeOriginal": {"tag": b"\x92\x91", "type": "ASCII", "count": "Any"},
+    "SubSecTimeDigitized": {"tag": b"\x92\x92", "type": "ASCII", "count": "Any"},
+
+    # G. Tags Relating to Picture-Taking Conditions
+    "ExposureTime": {"tag": b"\x82\x9A", "type": "RATIONAL", "count": 1},
+    "FNumber": {"tag": b"\x82\x9D", "type": "RATIONAL", "count": 1},
+    "ExposureProgram": {"tag": b"\x88\x22", "type": "SHORT", "count": 1},
+    "PhotographicSensitivity": {"tag": b"\x88\x27", "type": "SHORT", "count": "Any"},
+    "ShutterSpeedValue": {"tag": b"\x92\x01", "type": "SRATIONAL", "count": 1},
+    "ApertureValue": {"tag": b"\x92\x02", "type": "RATIONAL", "count": 1},
+    "BrightnessValue": {"tag": b"\x92\x03", "type": "SRATIONAL", "count": 1},
+    "ExposureBiasValue": {"tag": b"\x92\x04", "type": "SRATIONAL", "count": 1},
+    "MeteringMode": {"tag": b"\x92\x07", "type": "SHORT", "count": 1},
+    "LightSource": {"tag": b"\x92\x08", "type": "SHORT", "count": 1},
+    "Flash": {"tag": b"\x92\x09", "type": "SHORT", "count": 1},
+    "FocalLength": {"tag": b"\x92\x0A", "type": "RATIONAL", "count": 1},
+
+    # H. Tags Relating to Shooting Situation
+    "Temperature": {"tag": b"\x94\x00", "type": "SRATIONAL", "count": 1},
+    "Humidity": {"tag": b"\x94\x01", "type": "RATIONAL", "count": 1},
+    "Pressure": {"tag": b"\x94\x02", "type": "RATIONAL", "count": 1},
+    "WaterDepth": {"tag": b"\x94\x03", "type": "SRATIONAL", "count": 1},
+    "Acceleration": {"tag": b"\x94\x04", "type": "RATIONAL", "count": 1},
+    "CameraElevationAngle": {"tag": b"\x94\x05", "type": "SRATIONAL", "count": 1},
+
+    # I. Other Tags
+    "ImageUniqueID": {"tag": b"\xA4\x20", "type": "ASCII", "count": 33},
+    "CameraOwnerName": {"tag": b"\xA4\x30", "type": "ASCII or UTF-8", "count": "Any"},
+    "BodySerialNumber": {"tag": b"\xA4\x31", "type": "ASCII", "count": "Any"},
+    "LensSpecification": {"tag": b"\xA4\x32", "type": "RATIONAL", "count": 4},
+    "LensMake": {"tag": b"\xA4\x33", "type": "ASCII or UTF-8", "count": "Any"},
+    "LensModel": {"tag": b"\xA4\x34", "type": "ASCII or UTF-8", "count": "Any"},
+    "LensSerialNumber": {"tag": b"\xA4\x35", "type": "ASCII", "count": "Any"},
+    "ImageTitle": {"tag": b"\xA4\x36", "type": "ASCII or UTF-8", "count": "Any"},
+    "Photographer": {"tag": b"\xA4\x37", "type": "ASCII or UTF-8", "count": "Any"},
+    "ImageEditor": {"tag": b"\xA4\x38", "type": "ASCII or UTF-8", "count": "Any"},
+    "CameraFirmware": {"tag": b"\xA4\x39", "type": "ASCII or UTF-8", "count": "Any"},
+    "RAWDevelopingSoftware": {"tag": b"\xA4\x3A", "type": "ASCII or UTF-8", "count": "Any"},
+    "ImageEditingSoftware": {"tag": b"\xA4\x3B", "type": "ASCII or UTF-8", "count": "Any"},
+    "MetadataEditingSoftware": {"tag": b"\xA4\x3C", "type": "ASCII or UTF-8", "count": "Any"},
+}
 
 # # Recording Notation Level
 # ACCESABILITY_NOTATION = {
@@ -45,9 +114,6 @@ TYPE_SIZE_BYTES = {
 #     "O":"Optional",
 #     "N":"It is not allowed to record"     
 # }
-
-
-
 
 # IMPORTANT NOTE: EXIF Tags build upon the TIFF structure, but EXIF is an extension of TIFF (superset). They share the same underlying data strcuture.
 # NOTE TIFF: Describes image structure and storage. Focus on internal strucuture.
