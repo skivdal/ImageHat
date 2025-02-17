@@ -15,28 +15,46 @@ SIGNED_RATIONAL = 10 # Two SIGNED_LONGs values. 64-bits in total (32 + 32).
 FLOAT = 11 # A 32-bit single-precision floating-point number. 
 DOUBLE = 12 # A 64-bit double-precision floating-point number.
 UTF_8 = 129 # An 8-bit integer representing a string according to UTF-8
-SHORT_OR_LONG = [SHORT, LONG]
+SHORT_OR_LONG = [SHORT, LONG] 
 ASCII_OR_UTF_8 = [ASCII, UTF_8]
 ANY = [BYTE, ASCII, SHORT, LONG, RATIONAL, SIGNED_BYTE, UNDEFINED, SINGED_SHORT, SIGNED_LONG, SIGNED_RATIONAL, FLOAT, DOUBLE, UTF_8]
 
 
-TYPE_SIZE_BYTES = {
-    BYTE:1,
-    ASCII:1,
-    SHORT:2,
-    LONG:4,
-    RATIONAL:8,
-    SIGNED_BYTE:1,
-    UNDEFINED:1,
-    SINGED_SHORT:2,
-    SIGNED_LONG:4, 
-    SIGNED_RATIONAL:8,
-    FLOAT:4,
-    DOUBLE:8,
-    UTF_8:1
+TAG_TYPE_SIZE_BYTES = {
+    "BYTE":1,
+    "UTF_8":1,
+    "ASCII":1,
+    "SHORT":2,
+    "LONG":4,
+    "RATIONAL":8,
+    "SIGNED_BYTE":1,
+    "UNDEFINED":1,
+    "SINGED_SHORT":2,
+    "SIGNED_LONG":4, 
+    "SIGNED_RATIONAL":8,
+    "FLOAT":4,
+    "DOUBLE":8,
 }
 
-EXIF_TAGS_REV_1 = {
+TAG_TYPES = {
+    1:"BYTE",
+    2:"ASCII",
+    3:"SHORT",
+    4:"LONG",
+    5:"RATIONAL",
+    6:"SIGNED_BYTE",
+    7:"UNDEFINED", # Used for EXIF maker notes
+    8:"SIGNED_SHORT",
+    9:"SIGNED_LONG",
+    10:"SIGNED_RATIONAL",
+    11:"FLOAT",
+    12:"DOUBLE",
+    129:"UTF-8",
+}
+
+# MORE_THAN_4B = ["RATIONAL", "SIGNED_RATIONAL", "DOUBLE"]
+
+EXIF_TAGS = {
     # A. Tags Relating to Version
     "ExifVersion": {"tag": b"\x90\x00", "type": "UNDEFINED", "count": 4},
     "FlashpixVersion": {"tag": b"\xA0\x00", "type": "UNDEFINED", "count": 4},
@@ -105,21 +123,107 @@ EXIF_TAGS_REV_1 = {
     "RAWDevelopingSoftware": {"tag": b"\xA4\x3A", "type": "ASCII or UTF-8", "count": "Any"},
     "ImageEditingSoftware": {"tag": b"\xA4\x3B", "type": "ASCII or UTF-8", "count": "Any"},
     "MetadataEditingSoftware": {"tag": b"\xA4\x3C", "type": "ASCII or UTF-8", "count": "Any"},
+
+    # J. Tags Relating to Picture-Taking Conditions
+    "ExposureTime": {"tag": b"\x82\x9A", "type": "RATIONAL", "count": 1},
+    "FNumber": {"tag": b"\x82\x9D", "type": "RATIONAL", "count": 1},
+    "ExposureProgram": {"tag": b"\x88\x22", "type": "SHORT", "count": 1},
+    "SpectralSensitivity": {"tag": b"\x88\x24", "type": "ASCII", "count": "Any"},
+    "PhotographicSensitivity": {"tag": b"\x88\x27", "type": "SHORT", "count": "Any"},
+    "OECF": {"tag": b"\x88\x28", "type": "UNDEFINED", "count": "Any"},
+    "SensitivityType": {"tag": b"\x88\x30", "type": "SHORT", "count": 1},
+    "StandardOutputSensitivity": {"tag": b"\x88\x31", "type": "LONG", "count": 1},
+    "RecommendedExposureIndex": {"tag": b"\x88\x32", "type": "LONG", "count": 1},
+    "ISOSpeed": {"tag": b"\x88\x33", "type": "LONG", "count": 1},
+    "ISOSpeedLatitudeyyy": {"tag": b"\x88\x34", "type": "LONG", "count": 1},
+    "ISOSpeedLatitudezzz": {"tag": b"\x88\x35", "type": "LONG", "count": 1},
+    "ShutterSpeedValue": {"tag": b"\x92\x01", "type": "SRATIONAL", "count": 1},
+    "ApertureValue": {"tag": b"\x92\x02", "type": "RATIONAL", "count": 1},
+    "BrightnessValue": {"tag": b"\x92\x03", "type": "SRATIONAL", "count": 1},
+    "ExposureBiasValue": {"tag": b"\x92\x04", "type": "SRATIONAL", "count": 1},
+    "MaxApertureValue": {"tag": b"\x92\x05", "type": "RATIONAL", "count": 1},
+    "SubjectDistance": {"tag": b"\x92\x06", "type": "RATIONAL", "count": 1},
+    "MeteringMode": {"tag": b"\x92\x07", "type": "SHORT", "count": 1},
+    "LightSource": {"tag": b"\x92\x08", "type": "SHORT", "count": 1},
+    "Flash": {"tag": b"\x92\x09", "type": "SHORT", "count": 1},
+    "FocalLength": {"tag": b"\x92\x0A", "type": "RATIONAL", "count": 1},
+    "SubjectArea": {"tag": b"\x92\x14", "type": "SHORT", "count": [2, 3, 4]},
+    "FlashEnergy": {"tag": b"\xA2\x0B", "type": "RATIONAL", "count": 1},
+    "SpatialFrequencyResponse": {"tag": b"\xA2\x0C", "type": "UNDEFINED", "count": "Any"},
+    "FocalPlaneXResolution": {"tag": b"\xA2\x0E", "type": "RATIONAL", "count": 1},
+    "FocalPlaneYResolution": {"tag": b"\xA2\x0F", "type": "RATIONAL", "count": 1},
+    "FocalPlaneResolutionUnit": {"tag": b"\xA2\x10", "type": "SHORT", "count": 1},
+    "SubjectLocation": {"tag": b"\xA2\x14", "type": "SHORT", "count": 2},
+    "ExposureIndex": {"tag": b"\xA2\x15", "type": "RATIONAL", "count": 1},
+    "SensingMethod": {"tag": b"\xA2\x17", "type": "SHORT", "count": 1},
+    "FileSource": {"tag": b"\xA3\x00", "type": "UNDEFINED", "count": 1},
+    "SceneType": {"tag": b"\xA3\x01", "type": "UNDEFINED", "count": 1},
+    "CFAPattern": {"tag": b"\xA3\x02", "type": "UNDEFINED", "count": "Any"},
+    "CustomRendered": {"tag": b"\xA4\x01", "type": "SHORT", "count": 1},
+    "ExposureMode": {"tag": b"\xA4\x02", "type": "SHORT", "count": 1},
+    "WhiteBalance": {"tag": b"\xA4\x03", "type": "SHORT", "count": 1},
+    "DigitalZoomRatio": {"tag": b"\xA4\x04", "type": "RATIONAL", "count": 1},
+    "FocalLengthIn35mmFilm": {"tag": b"\xA4\x05", "type": "SHORT", "count": 1},
+    "SceneCaptureType": {"tag": b"\xA4\x06", "type": "SHORT", "count": 1},
+    "GainControl": {"tag": b"\xA4\x07", "type": "RATIONAL", "count": 1},
+    "Contrast": {"tag": b"\xA4\x08", "type": "SHORT", "count": 1},
+    "Saturation": {"tag": b"\xA4\x09", "type": "SHORT", "count": 1},
+    "Sharpness": {"tag": b"\xA4\x0A", "type": "SHORT", "count": 1},
+    "DeviceSettingDescription": {"tag": b"\xA4\x0B", "type": "UNDEFINED", "count": "Any"},
+    "SubjectDistanceRange": {"tag": b"\xA4\x0C", "type": "SHORT", "count": 1},
+    "CompositeImage": {"tag": b"\xA4\x60", "type": "SHORT", "count": 1},
+    "SourceImageNumberOfCompositeImage": {"tag": b"\xA4\x61", "type": "SHORT", "count": 2},
+    "SourceExposureTimesOfCompositeImage": {"tag": b"\xA4\x62", "type": "UNDEFINED", "count": "Any"},
 }
 
-# # Recording Notation Level
-# ACCESABILITY_NOTATION = {
-#     "M":"Mandatory",
-#     "R":"Recommended",
-#     "O":"Optional",
-#     "N":"It is not allowed to record"     
-# }
+EXIF_GPS_TAGS = {
+    "GPSVersionID": {"tag": b"\x00", "type": "BYTE", "count": 4},
+    "GPSLatitudeRef": {"tag": b"\x01", "type": "ASCII", "count": 2},
+    "GPSLatitude": {"tag": b"\x02", "type": "RATIONAL", "count": 3},
+    "GPSLongitudeRef": {"tag": b"\x03", "type": "ASCII", "count": 2},
+    "GPSLongitude": {"tag": b"\x04", "type": "RATIONAL", "count": 3},
+    "GPSAltitudeRef": {"tag": b"\x05", "type": "BYTE", "count": 1},
+    "GPSAltitude": {"tag": b"\x06", "type": "RATIONAL", "count": 1},
+    "GPSTimeStamp": {"tag": b"\x07", "type": "RATIONAL", "count": 3},
+    "GPSSatellites": {"tag": b"\x08", "type": "ASCII", "count": "Any"},
+    "GPSStatus": {"tag": b"\x09", "type": "ASCII", "count": 2},
+    "GPSMeasureMode": {"tag": b"\x0A", "type": "ASCII", "count": 2},
+    "GPSDOP": {"tag": b"\x0B", "type": "RATIONAL", "count": 1},
+    "GPSSpeedRef": {"tag": b"\x0C", "type": "ASCII", "count": 2},
+    "GPSSpeed": {"tag": b"\x0D", "type": "RATIONAL", "count": 1},
+    "GPSTrackRef": {"tag": b"\x0E", "type": "ASCII", "count": 2},
+    "GPSTrack": {"tag": b"\x0F", "type": "RATIONAL", "count": 1},
+    "GPSImgDirectionRef": {"tag": b"\x10", "type": "ASCII", "count": 2},
+    "GPSImgDirection": {"tag": b"\x11", "type": "RATIONAL", "count": 1},
+    "GPSMapDatum": {"tag": b"\x12", "type": "ASCII", "count": "Any"},
+    "GPSDestLatitudeRef": {"tag": b"\x13", "type": "ASCII", "count": 2},
+    "GPSDestLatitude": {"tag": b"\x14", "type": "RATIONAL", "count": 3},
+    "GPSDestLongitudeRef": {"tag": b"\x15", "type": "ASCII", "count": 2},
+    "GPSDestLongitude": {"tag": b"\x16", "type": "RATIONAL", "count": 3},
+    "GPSDestBearingRef": {"tag": b"\x17", "type": "ASCII", "count": 2},
+    "GPSDestBearing": {"tag": b"\x18", "type": "RATIONAL", "count": 1},
+    "GPSDestDistanceRef": {"tag": b"\x19", "type": "ASCII", "count": 2},
+    "GPSDestDistance": {"tag": b"\x1A", "type": "RATIONAL", "count": 1},
+    "GPSProcessingMethod": {"tag": b"\x1B", "type": "UNDEFINED", "count": "Any"},
+    "GPSAreaInformation": {"tag": b"\x1C", "type": "UNDEFINED", "count": "Any"},
+    "GPSDateStamp": {"tag": b"\x1D", "type": "ASCII", "count": 11},
+    "GPSDifferential": {"tag": b"\x1E", "type": "SHORT", "count": 1},
+    "GPSHPositioningError": {"tag": b"\x1F", "type": "RATIONAL", "count": 1},
+}
+
+EXIF_TAGS_REVERSED = {v["tag"]: k for k, v in EXIF_TAGS.items()}
+EXIF_TAG_DICT = {**EXIF_TAGS_REVERSED}
+
+GPS_TAGS_REVERSED = {v["tag"]: k for k, v in EXIF_GPS_TAGS.items()}
+EXIF_GPS_TAGS_DICT = {**GPS_TAGS_REVERSED}
+
 
 # IMPORTANT NOTE: EXIF Tags build upon the TIFF structure, but EXIF is an extension of TIFF (superset). They share the same underlying data strcuture.
 # NOTE TIFF: Describes image structure and storage. Focus on internal strucuture.
 # NOTE EXIF: Specifically designed for photographic metadata. 
 # NOTE: ALL information is directly derived from the JEITA ISO standard documentation.
 
+"""
 # NOTE: This dictionary refers to the attribute inforamtion relating to 
 TIFF_SPECIFIC_ATTRIBS = {
     # A. Tags relating to image data structure
@@ -593,4 +697,4 @@ EXIF_IFD_GPS_ATTRIB_INFO = {
         "Dec": 31, "Hex": b"\x00\x1F", "Type": RATIONAL, "Count": 1
     }
 }
-
+"""
