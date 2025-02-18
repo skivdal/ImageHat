@@ -46,7 +46,7 @@ IDENTIFIERS = {
     "JIS_cc": b"\x4A\x49\x53\x00\x00\x00\x00\x00", # Japanese encoding (we're dealing with a japanese standard)
     "Unicode_cc": b"\x55\x4E\x49\x43\x4F\x44\x45\x00", # UTF-8, unicode encoding
     "undefined_cc": b"\x00\x00\x00\x00\x00\x00\x00\x00", # No specific encoding (any)
-
+    
 }
 
 

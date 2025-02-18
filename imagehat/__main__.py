@@ -1,22 +1,28 @@
-import os, os.path
-import struct
+
 from constants import (MARKER_SEGMENTS_JPEG_ADDRESS,
                        MARKER_SEGMENTS_JPEG_NAME,
                        IDENTIFIERS)
 from tag_support_levels import (TAG_TYPES,
+                                OVERFLOW_TYPES,
                                 TAG_TYPE_SIZE_BYTES,
                                 EXIF_TAG_DICT,
                                 EXIF_GPS_TAGS_DICT)
 from valid_formats import VALID_FORMATS
 # from output_structure import (_EXIF_DATA_OUTPUT_4B,
 #                               _EXIF_DATA_OUTPUT_L4B)
+import os, os.path, struct
+from typing import Union
 
 class ImageHat():
 
     def __init__(self, img_path):
         self.img_path: str = img_path # stores the image adress / path
         self.validate_file_path() # validates file path
-        self.binary_repr: str = self.get_binary_data() # creates hexadecimal representaion
+        self.binary_repr: bytes = self.get_binary_data() # creates hexadecimal representaion
+        self.binary_repr: bytes = self.binary_repr
+        self.file_info: Union[None, dict] = None
+        self.app1_info: Union[None, dict] = None
+        self.exif_info: Union[None, dict] = None
 
     def get_binary_data(self) -> bytes:
         try:
@@ -246,6 +252,7 @@ class ImageHat():
             tag_bytes = tag.to_bytes(2, byteorder="big")  # Convert integer tag to byte format
             if tag_bytes in EXIF_TAG_DICT:
                 tag_name = EXIF_TAG_DICT[tag_bytes]
+                if tag_name == "MakerNote": break # Just for now
                 exif_data[tag_name] = self.parse_tag(data_type=data_type,
                                                      count=count,
                                                      value=value,
@@ -257,35 +264,46 @@ class ImageHat():
         return report
 
     def parse_tag(self, data_type, count, value, entry_offset, tiff_offset, endianness) -> dict:
-        data_type = TAG_TYPES.get(data_type, 7) # Fetches type UNDEFINED if fails
-        data_type_doc = TAG_TYPE_SIZE_BYTES.get(data_type, "UNDEFINED")
-        if count <= 4:
-            return {"Markup": f"[{entry_offset}:{entry_offset+12}]",
-                    "Absolute Offset": entry_offset,
-                    "TIFF offset": entry_offset-tiff_offset,
-                    "Type": data_type,
-                    "Doc. Type": data_type_doc,
-                    "Count": count,
-                    "Content": hex(value),
-                    "Content Value": value,
-                    "Status":None} # Advanced setting, in development
-        
-        content_bytes = self.binary_repr[value+tiff_offset:value+count+tiff_offset]
-        # content = struct.unpack(f"{endianness}", content_bytes)[0]
-        return {"Markup": f"[{entry_offset}:{entry_offset+12}]",
+        dt = TAG_TYPES.get(data_type, 7) # Fetches type UNDEFINED if fails
+
+        if dt in OVERFLOW_TYPES or count > 4:
+            content_bytes = self.binary_repr[value+tiff_offset:value+count+tiff_offset]
+            content_offset = value
+            if dt in OVERFLOW_TYPES:
+                content_bytes = self.binary_repr[value+tiff_offset:value+tiff_offset+8]
+                num, denom = struct.unpack(f"{endianness}II", content_bytes)
+                value = num/denom
+
+            # content_bytes = self.binary_repr[value+tiff_offset:value+count+tiff_offset]
+            # # content = struct.unpack(f"{endianness}", content_bytes)[0]
+            return {
+                "Markup": f"[{entry_offset}:{entry_offset+12}]",
                 "Absolute Offset":entry_offset,
                 "TIFF offset":entry_offset-tiff_offset,
-                "Type": data_type,
-                "Doc. Type": data_type_doc,
+                "Recorded Type": data_type,
+                "Type": dt,
                 "Count": count,
-                #"Content Offset": value,
-                "Content Location": value,
-                "Content": content_bytes,
-                # "Content Value": hex(content_bytes),
-                "Status":None} # Advanced setting, in development
-    
-    # def unpack_tag(self, )
+                "Content Location": content_offset,
+                "Content": bytes(content_bytes),
+                "Content Value": value,
+                "Status":None # Advanced setting, in development
+            }
 
+        return {
+            "Markup": f"[{entry_offset}:{entry_offset+12}]",
+            "Absolute Offset": entry_offset,
+            "TIFF offset": entry_offset-tiff_offset,
+            "Recorded Type":data_type,
+            "Type": dt,
+            "Count": count,
+            "Content": hex(value),
+            "Content Value": value,
+            "Status":None # Advanced setting, in development
+        }
+    
+
+
+        
 
     def generate_report(self):
         """
@@ -315,6 +333,10 @@ class ImageHat():
         else:
             return "No APP1 segment found in the image."
 
+        self.file_info = report["general_file_info"]
+        self.app1_info = {k: v for k, v in report["app1_info"].items() if k != "EXIF Information"}
+        self.exif_info = report["app1_info"]["EXIF Information"]
+  
         return report
 
     def read_jpeg_markers(self) -> dict:
@@ -377,6 +399,7 @@ if __name__ == "__main__":
     file_path = r"tests\testsets\testset-small\Sony_DSC_H50_Sony_DSC-H50_0_47713.JPG"
     img = ImageHat(file_path)
     report = img.generate_report()
+    print
 
     # testset_folder = r"tests\testsets\testset-small"
     # list_of_images = [os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)]
@@ -393,5 +416,4 @@ if __name__ == "__main__":
         print(f"{k}: {v}")
         print()
 
-    print(img.binary_repr[650:654])
-    print(img.binary_repr[650:670])
+    print(img.app1_info)
