@@ -41,7 +41,7 @@ IDENTIFIERS = {
     "offset_first_ifd": b"\x08\x00\x00\x00", # Offset to the start  of the first IFD
     "exif_ifd_pointer": b"\x87\x69", # The EXIF IFD pointer
     "gps_ifd_pointer": b"\x88\x25", # The GPS IFD pointer
-    "interoperatbility_ifd_pointer":b"\xA0\x05", # The Onteroperability IFD pointer
+    "interoperatbility_ifd_pointer":b"\xA0\x05", # The Interoperability IFD pointer
     "ASCII_cc": b"\x41\x53\x43\x49\x49\x00\x00\x00", # ASCII encoding
     "JIS_cc": b"\x4A\x49\x53\x00\x00\x00\x00\x00", # Japanese encoding (we're dealing with a japanese standard)
     "Unicode_cc": b"\x55\x4E\x49\x43\x4F\x44\x45\x00", # UTF-8, unicode encoding
