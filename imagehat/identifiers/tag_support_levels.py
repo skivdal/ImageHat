@@ -213,6 +213,11 @@ EXIF_GPS_TAGS = {
     "GPSHPositioningError": {"tag": b"\x1F", "type": "RATIONAL", "count": 1},
 }
 
+INTEROPERABILITY_EXIF_TAGS = {
+    # Attached information realted to interoperability
+    "InteroperabilityIndex": {"tag": b"\x01", "type":"ASCII", "count":"Any"}
+}
+
 EXIF_TAGS_REVERSED = {v["tag"]: k for k, v in EXIF_TAGS.items()}
 EXIF_TAG_DICT = {**EXIF_TAGS_REVERSED}
 
