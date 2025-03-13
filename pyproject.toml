@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imagehat"
+version = "0.1.0"
+description = "A Python package for extracting and analyzing image metadata"
+authors = [
+    { name = "Sindre Sæter", email = "your_email@example.com" }
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "pillow",
+    "numpy",
+    "structlog"
+]
+
+[project.urls]
+Homepage = "https://github.com/sinsaegit/"
+Documentation = "https://github.com/sinsaegit/README"
+Repository = "https://github.com/sinsaegit/ImageHat"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ImageHat*"]
+exclude = ["tests*"]
+
