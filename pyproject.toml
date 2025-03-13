@@ -1,30 +1,13 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "imagehat"
 version = "0.1.0"
-description = "A Python package for extracting and analyzing image metadata"
+description = "A structured metadata extraction tool for EXIF analysis and forensic verification."
+readme = "README.md"
 authors = [
-    { name = "Sindre Sæter", email = "your_email@example.com" }
+    { name = "Sindre Sæter", email = "fij016@uib.no"}
 ]
 license = { file = "LICENSE" }
-readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dependencies = [
-    "pillow",
-    "numpy",
-    "structlog"
+    "ruff>=0.9.10",
 ]
-
-[project.urls]
-Homepage = "https://github.com/sinsaegit/"
-Documentation = "https://github.com/sinsaegit/README"
-Repository = "https://github.com/sinsaegit/ImageHat"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["ImageHat*"]
-exclude = ["tests*"]
-
