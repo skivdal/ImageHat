@@ -568,65 +568,6 @@ class ImageHat:
         # Generate reports
         return [cls(img).get_image_data(verbose=verbose) for img in image_files]
 
-    @classmethod
-    def metadata_comparison(
-        cls, folder_path: str = None, list_of_images: list = None
-    ) -> dict:
-        """
-        Extracts and compares EXIF metadata from multiple images, using the first image as a pivot.
-
-        Args:
-            folder_path (str): Path to a folder containing JPEG images.
-
-        Returns:
-            dict: Dictionary containing ordered EXIF data across images.
-        """
-        if not folder_path and not list_of_images:
-            raise ValueError("Either folder_path or list_of_images must be provided.")
-
-        if not os.path.isdir(folder_path) and not list_of_images:
-            raise ValueError("Invalid folder path.")
-
-        if folder_path:
-            image_reports = cls.get_image_datas(folder_path)
-        else:
-            if not all(isinstance(img, ImageHat) for img in list_of_images):
-                raise ValueError(
-                    "All elements in list_of_images must be instances of ImageHat."
-                )
-            image_reports = [
-                cls._get_image_data(verbose="exif") for img in list_of_images
-            ]
-
-        # Ensure we have enough images for comparison
-        if len(image_reports) < 2:
-            raise ValueError(
-                "At least two images are required for metadata comparison."
-            )
-
-        pivot_metadata = (
-            image_reports[0]
-            .get("APP1 Info", {})
-            .get("EXIF Info", {})
-            .get("EXIF Data", {})
-        )
-        if not pivot_metadata:
-            raise ValueError("No EXIF metadata found in the first image.")
-
-        metadata_records = {tag: [] for tag in pivot_metadata.keys()}
-
-        # Iterate over images and match order with pivot
-        for report in image_reports:
-            exif_data = (
-                report.get("APP1 Info", {}).get("EXIF Info", {}).get("EXIF Data", {})
-            )
-            for tag in metadata_records:
-                metadata_records[tag].append(
-                    exif_data.get(tag, None)
-                )  # Use None if tag is missing
-
-        return metadata_records
-
 
 if __name__ == "__main__":
 
