@@ -6,7 +6,7 @@ from identifiers.constants import (
     MARKER_SEGMENTS_JPEG_NAME,
     IDENTIFIERS,
 )
-from identifiers.tag_support_levels import (
+from imagehat.identifiers.eixf_attribute_information import (
     TAG_TYPES,
     OVERFLOW_TYPES,
     EXIF_TAGS,

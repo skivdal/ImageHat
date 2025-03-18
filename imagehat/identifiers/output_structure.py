@@ -16,7 +16,7 @@ OVERFLOW_OUTPUT_STRUCTURE = {
     # "Status": None,  # Advanced setting, in development
 }
 
-BASIC_OUTPUT_STRUCTURE = { 
+BASIC_OUTPUT_STRUCTURE = {
     "Markup": f"[{entry_offset}:{entry_offset+12}]",
     "Absolute Offset": entry_offset,
     "TIFF offset": entry_offset - tiff_offset,
