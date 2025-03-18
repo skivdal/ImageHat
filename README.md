@@ -36,7 +36,7 @@ EXIF (Exchangeable Image File Format) metadata provides essential information ab
 - Required Python Libraries: `os`, `struct`, `pytest`, `pytest-cov`, etc.
 
 #### Installation
-##### **1 Clone the Repository**
+##### **- 1 Clone the Repository**
 Open a terminal and run:
 
 ```sh
@@ -44,7 +44,7 @@ git clone https://github.com/YOUR_USERNAME/ImageHat.git
 cd ImageHat
 ```
 
-##### **2 Create and Activate a Virtual Environment**
+##### **- 2 Create and Activate a Virtual Environment**
 
 - For windows (CMD, Terminal or PowerShell)
 ```sh
@@ -58,10 +58,15 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-##### **3 Install Dependencies**
+##### **- 3 Install Dependencies**
 
 ```sh
 pip install -r requirements.txt
+```
+
+Sometimes you may need to create a symlink:
+```sh
+pip install -e .
 ```
 
 

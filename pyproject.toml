@@ -1,0 +1,13 @@
+[project]
+name = "imagehat"
+version = "0.1.0"
+description = "A structured metadata extraction tool for EXIF analysis and forensic verification."
+readme = "README.md"
+authors = [
+    { name = "Sindre Sæter", email = "fij016@uib.no"}
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+dependencies = [
+    "ruff>=0.9.10",
+]

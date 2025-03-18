@@ -1,4 +1,4 @@
-from base_parser import BaseParser
+from imagehat.parsers.base_parser import BaseParser
 
 class JPEGParser(BaseParser):
     def parse(self):
