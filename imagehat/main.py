@@ -26,9 +26,16 @@ class ImageHat:
 
     Example Usage:
     --------------
+    ```
     >>> image = ImageHat("sample.jpg")
     >>> markers = image.get_image_data(verbose="exif")
     >>> print(markers)
+    ```
+
+    ```
+    >>> testset_folder = os.path.join("tests", "testsets", "testset-small")
+    >>> exif_dicts = ImageHat.get_image_datas(testset_folder)
+    ```
     """
 
     def __init__(self, img_path):
@@ -632,11 +639,7 @@ if __name__ == "__main__":
 
     # # NOTE: Testing on all camera models in Dresden Dataset
     testset_folder = os.path.join("tests", "testsets", "testset-small")
-    list_of_images = [
-        os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
-    ]
-    images = [ImageHat(img) for img in list_of_images]
-
-    print(images[9].get_exif_image_data())
-    for i in images:
-        print(i.binary_repr.find(b"\x41\x53\x43\x49\x49\x00\x00\x00"))
+    # list_of_images = [os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)]
+    # images = [ImageHat(img) for img in list_of_images]
+    exif_dicts = ImageHat.get_image_datas(testset_folder)
+    print(exif_dicts[1])
