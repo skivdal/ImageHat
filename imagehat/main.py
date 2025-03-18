@@ -384,32 +384,38 @@ class ImageHat:
         order: int,
     ) -> dict:
         """
-        Parses the identidified tag within the _read_ifd() and ensures that the the program
-        parses the identified tags in accordance with byte size and recorded data type.
+        Parses an identified EXIF tag within the `_read_ifd()` method, ensuring that
+        the tag is processed according to its byte size and recorded data type.
 
-        :param data_type: represents the recorded data_type
+        If the tag's value field exceeds 4 bytes, the function retrieves the value
+        from the appropriate offset in the APP1 segment.
+
+        :param tag: The tag identifier in bytes.
+        :type tag: bytes
+
+        :param data_type: The numeric representation of the tag’s data type.
         :type data_type: int
 
-        :param count:
-        :type count:
+        :param count: The number of data values associated with the tag.
+        :type count: int
 
-        :param value:
-        :type value:
+        :param value: The recorded value of the tag (or an offset if the value is stored elsewhere).
+        :type value: int
 
-        :param entry_offset:
-        :type entry_offset:
+        :param entry_offset: The absolute offset of the tag entry within the EXIF data.
+        :type entry_offset: int
 
-        :param tiff_offset:
-        :type tiff_offset:
+        :param tiff_offset: The TIFF header offset used for relative positioning.
+        :type tiff_offset: int
 
-        :param endianness:
-        :type endianness:
+        :param endianness: The endianness of the EXIF data ('<' for little-endian, '>' for big-endian).
+        :type endianness: str
 
-        :param order:
-        :type order:
+        :param order: The order of the tag within the parsed EXIF structure.
+        :type order: int
 
-        :return: A dictionary containing frutiful tag information. Return values differs
-                 if a tags' value field goes beyond 4 bytes.
+        :return: A dictionary containing detailed tag information. If the tag’s value exceeds 4 bytes,
+                 the content is extracted from the APP1 segment.
         :rtype: dict
         """
         dt = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
@@ -468,7 +474,7 @@ class ImageHat:
         :rtype: str
         """
         if endianness == "<":
-            tag_bytes = struct.pack(f">H", tag) # Packs as 
+            tag_bytes = struct.pack(f">H", tag)  # Packs as
         elif endianness == ">":
             tag_bytes = struct.pack(f"{endianness}H", tag)
 
@@ -477,16 +483,27 @@ class ImageHat:
         if tag_name:
             tag_info = EXIF_TAGS.get(tag_name)
             return tag_info["type"]
-        # tag_name = EXIF_TAG_DICT_REV.get(tag_bytes)
-        # print(tag_name)
-        # if tag_name:
-        #     tag_info = EXIF_TAGS.get(tag_name) or EXIF_GPS_TAGS.get(tag_name)
-        #     tag_type = tag_info["type"]
-        #     return tag_type
 
     def _parse_rational(
-        self, content_bytes, endianness
-    ):  # "<" for little-endian, ">" for big-endian
+        self, content_bytes: bytes, endianness
+    ) -> str | int:  # "<" for little-endian, ">" for big-endian
+        """
+        Parses a rational number (numerator/denominator) from EXIF metadata.
+
+        Rational values in EXIF metadata are typically stored as two 4-byte integers with a numerator (num) and adenominator (denom).
+
+        This function correctly unpacks these values according to the specified byte order.
+
+        :param content_bytes: The 8-byte content representing the rational value.
+        :type content_bytes: bytes
+
+        :param endianness: The byte order to use for unpacking ('<' for little-endian, '>' for big-endian).
+        :type endianness: str
+
+
+        :return: A tuple containing a string representation of a fraction and a decimal value of the fraction
+        :rtype: tuple
+        """
         num, denom = struct.unpack(f"{endianness}II", content_bytes)
         fraction_str = (
             f"{num}/{denom}" if denom else f"{num}/1"
@@ -494,16 +511,16 @@ class ImageHat:
         decimal_value = num / denom if denom else num  # Compute decimal representation
         return fraction_str, decimal_value  # Return both representations
 
-    def get_image_data(self, verbose: str = None) -> dict:
+    def get_exif_image_data(self) -> dict:
         """
-        Generates a thorough metadata report, including general image information.
+        Extracts and returns EXIF metadata from the image.
 
-        Args:
-            verbose (str): Verbosity mode. Options:
-                - "exif": Returns only EXIF metadata.
+        This method scans the JPEG file for EXIF data within the APP1 segment and
+        returns a structured metadata report.
 
-        Returns:
-            dict: The metadata report based on the selected verbosity mode.
+        :return: A dictionary containing the file name and extracted EXIF metadata.
+        :rtype: dict
+
         """
 
         # Extract JPEG markers
@@ -516,11 +533,34 @@ class ImageHat:
         app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
         exif_data = app1_info.get("EXIF Info", {})
 
-        if verbose == "exif":
-            return {
-                "file_name": self.img_path,
-                "exif_info": exif_data,
-            }  # Return only EXIF data
+        return {
+            "file_name": self.img_path,
+            "exif_info": exif_data,
+        }  # Return only EXIF data
+
+    def get_complete_image_data(self) -> dict:
+        """
+        Extracts and returns a complete metadata report for the image.
+
+        This method extracts general file information, JPEG markers, and metadata
+        from the APP1 segment.
+
+        :return: A dictionary containing:
+            - **General File Info** (*dict*): File name, format, and size details.
+            - **jpeg_markers** (*dict*): Extracted JPEG markers.
+            - **APP1 Info** (*dict*): Parsed metadata from the APP1 segment.
+        :rtype: dict
+        """
+
+        # Extract JPEG markers
+        jpeg_marker_info = self._read_jpeg_markers()
+
+        if "APP1" not in jpeg_marker_info:
+            return {"error": "No APP1 segment found in the image."}
+
+        # Extract APP1 segment and EXIF data
+        app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
+        # exif_data = app1_info.get("EXIF Info", {})
 
         # Construct full report
         _, file_ext = os.path.splitext(self.img_path)
@@ -538,18 +578,23 @@ class ImageHat:
         }
 
     @classmethod
-    def get_image_datas(cls, folder_path: str, verbose: str = None) -> list[dict]:
+    def get_image_datas(cls, folder_path: str, verbose: str = "complete") -> list[dict]:
         """
-        Generates metadata reports for all images in a folder.
+        Generates metadata reports for all images in a given folder.
 
-        Args:
-            folder_path (str): Path to the folder containing images.
-            verbose (str, optional): Verbosity mode. Options:
-                - None (default): Full metadata.
-                - "exif": Returns only EXIF metadata.
+        This method scans the provided folder for JPEG images and extracts metadata
+        based on the specified verbosity level.
 
-        Returns:
-            list[dict]: List of metadata reports, each corresponding to an image.
+        :param folder_path: The path to the folder containing images.
+        :type folder_path: str
+
+        :param verbose: Specifies the level of metadata extraction. Options:
+            - **"complete"** (*default*): Extracts full metadata.
+            - **"exif"**: Extracts only EXIF metadata.
+        :type verbose: str, optional
+
+        :return: A list of dictionaries, where each dictionary contains metadata for an image.
+        :rtype: list[dict]
         """
 
         if not os.path.isdir(folder_path):
@@ -566,7 +611,14 @@ class ImageHat:
             raise ValueError("No valid images found in the folder.")
 
         # Generate reports
-        return [cls(img).get_image_data(verbose=verbose) for img in image_files]
+        if verbose == "complete":
+            return [cls(img).get_complete_image_data() for img in image_files]
+        elif verbose == "exif":
+            return [cls(img).get_exif_image_data() for img in image_files]
+        else:
+            raise ValueError(
+                "Valid verbose option not used. Please choose 'complete' or 'exif'."
+            )
 
 
 if __name__ == "__main__":
@@ -585,14 +637,6 @@ if __name__ == "__main__":
     ]
     images = [ImageHat(img) for img in list_of_images]
 
-    # for i in images[8:10]:
-    #     print(i.get_image_data(verbose="exif"))
-
-    print(images[9].get_image_data())
+    print(images[9].get_exif_image_data())
     for i in images:
         print(i.binary_repr.find(b"\x41\x53\x43\x49\x49\x00\x00\x00"))
-
-    # comp = ImageHat.metadata_comparison(testset_folder)
-    # comp = comp.get("FocalLength")
-    # for items in comp:
-    #     print(items, sep=" ")
