@@ -9,17 +9,20 @@ from identifiers.constants import (
 from identifiers.tag_support_levels import (
     TAG_TYPES,
     OVERFLOW_TYPES,
-    EXIF_TAG_DICT,
+    EXIF_TAGS,
+    EXIF_GPS_TAGS,
+    EXIF_TAG_DICT_REV,
+    GPS_TAG_DICT_REV,
 )
 from identifiers.valid_formats import VALID_FORMATS
-from typing import Union
 
 
 class ImageHat:
     """
-    The ImageHat class is designed to analyze binary image files and extract EXIF metadata,
-    and validat. It supports methods for reading JPEG markers,
-    parsing EXIF data, and converting hex values.
+    The JPEGParser class is a sub class of the ImageHat super class. It is designed to analyze binary image files and
+    extract EXIF metadata directly from from binary image files. It supports methods for parsing JPEG, extracting EXIF
+    data, and - most importantly - converting raw bytes represented as hexadecimals in order to parse structured information
+    from bytes.
 
     Example Usage:
     --------------
@@ -29,19 +32,22 @@ class ImageHat:
     """
 
     def __init__(self, img_path):
-        self.img_path: str = img_path  # stores the image adress / path
-        self._validate_file_path()  # validates file path
+        self.img_path: str = img_path
+        self._validate_file_path()
         self.binary_repr: bytes = (
             self.get_binary_data()
         )  # creates hexadecimal representaion
         self._APP1_SEGMENT = None
-        self.file_info: Union[None, dict] = None
-        self.app1_info: Union[None, dict] = None
-        self.exif_info: Union[None, dict] = None
+        self.file_info: None | dict = None
+        self.app1_info: None | dict = None
+        self.exif_info: None | dict = None
 
     def get_binary_data(self) -> bytes:
         """
         Method for fetching image data as binary array.
+
+        :return: Image files in binary representation.
+        :rtype: bytes
         """
         try:
             with open(self.img_path, "rb") as binary_repr:
@@ -55,6 +61,7 @@ class ImageHat:
     def _validate_file_path(self) -> None:
         """
         This method is used for validating the file paths, reducing the chance of error during initializing.
+        Takes no parameters and is void.
         """
         if not isinstance(self.img_path, str):
             raise TypeError("Not valid type, must be string.")
@@ -80,33 +87,52 @@ class ImageHat:
         except Exception as e:
             raise RuntimeError(f"Error reading file: {e}") from e
 
-    # def validate_exif(self) -> None:
-    #     """
-    #     This method is for verifying that
-    #     """
-    #     if not MARKER_SEGMENTS_JPEG_NAME["APP1"] in self.binary_repr:
-    #         raise ValueError(f"Binary image does not contain Application Layer 1. No EXIF data found.")
+    @classmethod
+    def help(cls) -> None:
+        """
+        Prints help for class overview and method usage.
 
-    #     if not IDENTIFIERS["IDENTIFIERS"] in self.binary_repr:
-    #         raise ValueError(f"Binary image does not contain an EXIF identifier.")
+        Example usage:
+            >>> ImageHat.help()
+        """
+        print(help(cls))
+        print(cls.__doc__.strip())
+        print(cls.help.__doc__.strip())
 
     def __str__(self) -> str:
+        """
+        Method used to show basic information the ImageHat object.
+        """
         return f"ImageHat: {self.img_path}, Size: {len(self.binary_repr)} bytes"
 
-    def show_data(self) -> None:
+    def segment_data(self, end: int, start: int | None = None) -> None:
         """
         Metod for printing the whole byte array. Should be avoided as printed byte arrays are living nightmares.
-        """
-        print(self.binary_repr)
 
-    def _read_jpeg_markers(self) -> dict:
+        :return: a segment of self.binary_repr
         """
-        Locate all JPEG markers in the binary image, count occurrences,
-        and return their offset.
+        if start is None:
+            return self.binary_repr[:end]
+        return self.binary_repr[start:end]
 
-        Returns:
-            dict: A dictionary where keys are marker names and values are
-                dictionaries with 'count' and 'offset'.
+    def _read_jpeg_markers(self) -> dict[int | list[int]]:
+        """
+        Identifies and extracts key JPEG markers in the binary image.
+
+        This method scans the binary representation of the image to locate JPEG markers,
+        count their occurrences, and determine their byte offsets. Currently, it is limited
+        to finding only the **first** occurrence of each marker, as overlapping markers
+        make deeper analysis challenging
+
+        .. note::
+            Due to the complexity of marker placement in JPEG images, this method does not
+            guarantee the extraction of all markers if multiple overlapping occurences exist.
+            As they usually do.
+
+        :return: A dictionary where keys represent marker names, and values contain marker-specific
+                 metadata, including occurrence count and byte offsets.
+        :rtype: dict
+
         """
         marker_info = {}
 
@@ -122,15 +148,24 @@ class ImageHat:
                 marker_info[name] = {"count": len(offset), "offset": offset}
         return marker_info
 
-    def _read_app1_segment(self, app1_offset) -> dict:
+    def _read_app1_segment(self, app1_offset: int) -> dict:
         """
-        This method is used for locating the APP1 segment and recording information about its relative structure.
+        Locates the APP1 segment and the records its metadata content.
+        The APP1 segment is commonly used for **EXIF metadata storage**.
+
+        :param app1_offset: The bute offset where the APP1 segment starts in the image binary.
+        :type app1_offset: int
+
+        :return: A dictionary containing details about the APP1 segment, such as its
+                 size, position, structural integrity, but also .
+        :rtype: dict
         """
         report = {}
         # Recording APP1 segment size (s.b. 2 bytes)
         app1_size = int.from_bytes(
             self.binary_repr[app1_offset + 2 : app1_offset + 4], byteorder="big"
         )
+
         report["APP1 Size"] = app1_size  # For latter, add failsafe if segment > 64 kb
 
         # Recording start of APP1 segment
@@ -148,7 +183,7 @@ class ImageHat:
         exif_identifier = self._APP1_SEGMENT.find(IDENTIFIERS["exif_identifier"])
         report["EXIF Identifier Offset"] = exif_identifier if exif_identifier else None
 
-        # Recording byte order (s.b. 2 bytes)
+        # Recording byte order (should be 2 bytes)
         # Recodring endianness starts here. EXIF is big-endian until byte-order is discovered.
         byte_order_offset, endianness_report = self._find_target_byte(
             self._APP1_SEGMENT[:25], targets=[IDENTIFIERS["II"], IDENTIFIERS["MM"]]
@@ -177,7 +212,7 @@ class ImageHat:
         comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
         report["TIFF Validity"] = magic_number == comp_magic_number
 
-        # Recording offset to first IDF (s.b. 4 bytes)
+        # Recording offset to first IDF (should be 4 bytes)
         ifd_temp = self._convert_internal_identifier(
             endianness=endianness, datatype="I", id="offset_first_ifd"
         )
@@ -207,11 +242,18 @@ class ImageHat:
 
         return report
 
-    def _find_target_byte(
-        self, data: bytes, targets: Union[bytes, None]
-    ) -> Union[None, int, str]:
+    def _find_target_byte(self, data: bytes, targets: list[bytes]) -> None | int | str:
         """
-        Method that is used for finding the correct endianness with as little complexity as possible.
+        Helper method primarily used to find the byte order and its current location in the binary data.
+
+        :param data: Data segment of self.binary_repr. Set to next 25 bytes as a random, large enough int.
+        :type data: bytes
+        :param targets: List of bytes. Should recieve byte representation of MM or II.
+        :type: tagrets: List[bytes]
+
+        :return: Returns a index of the byte that was located, along with the byte itself.
+                 Return None if not found.
+        :rtype: int, byte, None
         """
         for target in targets:
             index = data.find(target)
@@ -223,7 +265,20 @@ class ImageHat:
         self, endianness: str, datatype: str, id: str
     ) -> bytes:
         """
-        Method that mitigates errors caused by incosistent representation of byte sequences.
+        Helper method that mitigates errors caused by incosistent representation of byte sequences.
+        As of standard, the JEITA documentation states that all tags should be represented as big endian [MM]
+        until other is stated. The tags in identifiers are also stored in big endian format, thus raises the
+        need for a helper methods that converts bytes if there are mitmatches in endianness.
+
+        :param endianness: The byte order detected (">" for big-endian, "<" for little-endian).
+        :type endianness: str
+        :param datatype: Byte size expected based on the format characters of the struct library.
+        :type datatype: str
+        :param id: Identifier based on the naming in the identifiers module.
+        :type id: str
+
+        :return: bytes packed from int based on the detected endianness.
+        :rtype: bytes
         """
         if id not in IDENTIFIERS:
             raise KeyError(
@@ -241,10 +296,24 @@ class ImageHat:
         )  # Repack value according to correct endianness
 
     def _read_exif_ifd(
-        self, ifd_start, num_entries, tiff_header_offset, endianness
+        self, ifd_start: int, num_entries: int, tiff_header_offset: int, endianness: str
     ) -> dict:
         """
-        Reads and extracts all Exif IFD entries.
+        Parses and reads the identified argumented Image File Directory (IFD) and extracts its related tags.
+
+        This method reads the IFD, identifies its entries, and extracts metadata tags.
+
+        :param ifd_start: The absolute offset where the IFD starts.
+        :type ifd_start: int
+        :param num_entries: The number of directory entries in the IFD.
+        :type num_entries: int
+        :param tiff_header_offset: The offset of the TIFF header within the EXIF data.
+        :type tiff_header_offset: int
+        :param endianness: The byte order used for reading the EXIF metadata (">" for big-endian, "<" for little-endian).
+        :type endianness: str
+
+        :return: A dictionary containing extracted EXIF tags and their values.
+        :rtype: dict
         """
         report = {}
 
@@ -286,10 +355,11 @@ class ImageHat:
             tag_bytes = tag.to_bytes(
                 2, byteorder="big"
             )  # Convert integer tag to byte format
-            if tag_bytes in EXIF_TAG_DICT:
-                tag_name = EXIF_TAG_DICT[tag_bytes]
+            if tag_bytes in EXIF_TAG_DICT_REV:
+                tag_name = EXIF_TAG_DICT_REV[tag_bytes]
                 # if tag_name == "MakerNote": break # Just for now
                 exif_data[tag_name] = self._parse_tag(
+                    tag=tag,
                     data_type=datatype,
                     count=count,
                     value=value,
@@ -303,9 +373,47 @@ class ImageHat:
         return report
 
     def _parse_tag(
-        self, data_type, count, value, entry_offset, tiff_offset, endianness, order
+        self,
+        tag: bytes,
+        data_type: int,
+        count: int,
+        value: int,
+        entry_offset: int,
+        tiff_offset: int,
+        endianness: str,
+        order: int,
     ) -> dict:
+        """
+        Parses the identidified tag within the _read_ifd() and ensures that the the program
+        parses the identified tags in accordance with byte size and recorded data type.
+
+        :param data_type: represents the recorded data_type
+        :type data_type: int
+
+        :param count:
+        :type count:
+
+        :param value:
+        :type value:
+
+        :param entry_offset:
+        :type entry_offset:
+
+        :param tiff_offset:
+        :type tiff_offset:
+
+        :param endianness:
+        :type endianness:
+
+        :param order:
+        :type order:
+
+        :return: A dictionary containing frutiful tag information. Return values differs
+                 if a tags' value field goes beyond 4 bytes.
+        :rtype: dict
+        """
         dt = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
+        doc_type = self._get_tag_type(tag=tag, endianness=endianness)
 
         if dt in OVERFLOW_TYPES or count > 4:
             content_bytes = self._APP1_SEGMENT[
@@ -325,12 +433,13 @@ class ImageHat:
                 "TIFF offset": entry_offset - tiff_offset,
                 "Recorded Type": data_type,
                 "Type": dt,
+                "Doc Type": doc_type,
                 "Count": count,
                 "Content Location": content_offset,
                 "Content": bytes(content_bytes),
                 "Content Value": value,
                 "Tag Order": order,
-                "Status": None,  # Advanced setting, in development
+                # "Status": None,  # Advanced setting, in development
             }
 
         return {
@@ -339,12 +448,41 @@ class ImageHat:
             "TIFF offset": entry_offset - tiff_offset,
             "Recorded Type": data_type,
             "Type": dt,
+            "Doc Type": doc_type,
             "Count": count,
             "Content": hex(value),
             "Content Value": value,
             "Tag Order": order,
-            "Status": None,  # Advanced setting, in development
+            # "Status": None,  # Advanced setting, in development
         }
+
+    def _get_tag_type(self, tag, endianness):
+        """
+        Given a tag ID (in bytes) and endianness ('MM' = Big-Endian, 'II' = Little-Endian),
+        returns the corresponding EXIF tag type from the TAG_TYPES dictionary.
+
+        :param tag_bytes: The raw tag ID (e.g., b'\x90\x03').
+        :type tag_bytes: bytes
+
+        :return: The tag type (e.g., "ASCII", "RATIONAL") or None if not found.
+        :rtype: str
+        """
+        if endianness == "<":
+            tag_bytes = struct.pack(f">H", tag) # Packs as 
+        elif endianness == ">":
+            tag_bytes = struct.pack(f"{endianness}H", tag)
+
+        tag_name = EXIF_TAG_DICT_REV.get(tag_bytes)
+
+        if tag_name:
+            tag_info = EXIF_TAGS.get(tag_name)
+            return tag_info["type"]
+        # tag_name = EXIF_TAG_DICT_REV.get(tag_bytes)
+        # print(tag_name)
+        # if tag_name:
+        #     tag_info = EXIF_TAGS.get(tag_name) or EXIF_GPS_TAGS.get(tag_name)
+        #     tag_type = tag_info["type"]
+        #     return tag_type
 
     def _parse_rational(
         self, content_bytes, endianness
@@ -381,7 +519,7 @@ class ImageHat:
         if verbose == "exif":
             return {
                 "file_name": self.img_path,
-                "exif_data": exif_data,
+                "exif_info": exif_data,
             }  # Return only EXIF data
 
         # Construct full report
@@ -466,20 +604,6 @@ class ImageHat:
                 "At least two images are required for metadata comparison."
             )
 
-        #     # Get only JPEG images
-        #     image_files = [
-        #         os.path.join(folder_path, f)
-        #         for f in os.listdir(folder_path)
-        #         if f.lower().endswith((".jpg", ".jpeg"))
-        #     ]
-
-        #     if len(image_files) < 2:
-        #         raise ValueError("At least two images are required for comparison.")
-
-        # # Generate reports for all images
-        #     image_reports = [ImageHat(img).generate_report() for img in image_files]
-
-        # Extract EXIF metadata from reports (first image as pivot)
         pivot_metadata = (
             image_reports[0]
             .get("APP1 Info", {})
@@ -520,9 +644,12 @@ if __name__ == "__main__":
     ]
     images = [ImageHat(img) for img in list_of_images]
 
+    # for i in images[8:10]:
+    #     print(i.get_image_data(verbose="exif"))
 
-    for i in images[:4]:
-        print(i.get_image_data(verbose="exif"))
+    print(images[9].get_image_data())
+    for i in images:
+        print(i.binary_repr.find(b"\x41\x53\x43\x49\x49\x00\x00\x00"))
 
     # comp = ImageHat.metadata_comparison(testset_folder)
     # comp = comp.get("FocalLength")

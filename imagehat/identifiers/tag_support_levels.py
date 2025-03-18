@@ -52,10 +52,12 @@ TAG_TYPES = {
     129:"UTF-8",
 }
 
+# Tag types that usually are too big to be represented with a complete value in the
+# EXIF IFD. The value of such tags are represented with an offset to another location
+# in the binary image file. 
 OVERFLOW_TYPES = ["RATIONAL", "SIGNED_RATIONAL", "DOUBLE"] 
 
-# MORE_THAN_4B = ["RATIONAL", "SIGNED_RATIONAL", "DOUBLE"]
-
+# Tags directly related to EXIF
 EXIF_TAGS = {
     # A. Tags Relating to Version
     "ExifVersion": {"tag": b"\x90\x00", "type": "UNDEFINED", "count": 4},
@@ -178,6 +180,7 @@ EXIF_TAGS = {
     "SourceExposureTimesOfCompositeImage": {"tag": b"\xA4\x62", "type": "UNDEFINED", "count": "Any"},
 }
 
+# EXIF tags related to GPS
 EXIF_GPS_TAGS = {
     "GPSVersionID": {"tag": b"\x00", "type": "BYTE", "count": 4},
     "GPSLatitudeRef": {"tag": b"\x01", "type": "ASCII", "count": 2},
@@ -213,16 +216,20 @@ EXIF_GPS_TAGS = {
     "GPSHPositioningError": {"tag": b"\x1F", "type": "RATIONAL", "count": 1},
 }
 
-INTEROPERABILITY_EXIF_TAGS = {
+# Tags related to interoperability. The tag(s) of this dictionary are set to
+# indicate which type of operability standard the image follows. 
+INTEROP_EXIF_TAGS = {
     # Attached information realted to interoperability
     "InteroperabilityIndex": {"tag": b"\x01", "type":"ASCII", "count":"Any"}
 }
 
-EXIF_TAGS_REVERSED = {v["tag"]: k for k, v in EXIF_TAGS.items()}
-EXIF_TAG_DICT = {**EXIF_TAGS_REVERSED}
+EXIF_TAG_DICT_REV = {v["tag"]: k for k, v in EXIF_TAGS.items()}
+# EXIF_TAG_DICT = {**EXIF_TAGS_REVERSED}
 
-GPS_TAGS_REVERSED = {v["tag"]: k for k, v in EXIF_GPS_TAGS.items()}
-EXIF_GPS_TAGS_DICT = {**GPS_TAGS_REVERSED}
+GPS_TAG_DICT_REV = {v["tag"]: k for k, v in EXIF_GPS_TAGS.items()}
+# EXIF_GPS_TAG_DICT = {**GPS_TAGS_REVERSED}
+
+INTEROP_TAG_DICT_REV = {v["tag"]: k for k, v in INTEROP_EXIF_TAGS.items()}
 
 
 # IMPORTANT NOTE: EXIF Tags build upon the TIFF structure, but EXIF is an extension of TIFF (superset). They share the same underlying data strcuture.

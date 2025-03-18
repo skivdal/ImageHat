@@ -1,6 +1,5 @@
 # Information of all the applied markers segments found in .JPEG
-# NOTE: Both of these dicts are used. They are used in different situations and for testing.
-
+# NOTE: Both of the twp next dicts are used. They are used in different situations and for testing.
 MARKER_SEGMENTS_JPEG_NAME = {
     "SOI" : b"\xFF\xD8", # (Start of Image)
     "APP0" : b"\xFF\xE0", # (JFIF Application Marker)
@@ -31,7 +30,7 @@ MARKER_SEGMENTS_JPEG_ADDRESS = {
     b"\xFF\xD9": "EOI"   # (End of Image)
 }
 
-#
+# Dict used for locating important segments of JPEG binary files 
 IDENTIFIERS = {
     "full_exif_identifier": b"\x45\x78\x69\x66\x00\x00", # "Exif\0\0", including the following NULL value and padding
     "exif_identifier": b"\x45\x78\x69\x66", # HEX representation of EXIF in ASCII
@@ -42,6 +41,10 @@ IDENTIFIERS = {
     "exif_ifd_pointer": b"\x87\x69", # The EXIF IFD pointer
     "gps_ifd_pointer": b"\x88\x25", # The GPS IFD pointer
     "interoperatbility_ifd_pointer": b"\xA0\x05", # The Interoperability IFD pointer
+}
+
+# Used for indentifying character information in segments where 
+CHARACTER_IDENTIFIER_CODES = {
     "ASCII_cc": b"\x41\x53\x43\x49\x49\x00\x00\x00", # ASCII character code encoding
     "JIS_cc": b"\x4A\x49\x53\x00\x00\x00\x00\x00", # Japanese character code encoding (we're dealing with a japanese standard)
     "Unicode_cc": b"\x55\x4E\x49\x43\x4F\x44\x45\x00", # UTF-8, unicode character code encoding
