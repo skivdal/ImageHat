@@ -20,9 +20,18 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
 const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
 
 const worker = new Worker(bundle.mainWorker!);
-const logger = new duckdb.ConsoleLogger();
+const logger = new duckdb.VoidLogger();
 const db = new duckdb.AsyncDuckDB(logger, worker);
 await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+
+await db.registerFileURL("dataset.csv", "/dataset.csv", duckdb.DuckDBDataProtocol.HTTP, false);
+await (await db.connect()).insertCSVFromPath("dataset.csv", {
+    schema: 'main',
+    name: 'image_metadata',
+    detect: true,
+    header: true,
+    delimiter: ',',
+});
 
 export default db;
 
