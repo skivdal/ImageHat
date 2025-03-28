@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import db from "./duckdb";
 import BarChart from "./BarChart";
 import "./App.css"
 
 async function getTagNames() {
+  // @ts-ignore
+  const { db } = await import("./duckdb");
+
   const conn = await db.connect();
   const r = await conn.query("SELECT DISTINCT tag_name FROM image_metadata ORDER BY tag_name;");
   const tagNames = r.toArray().map(r => r.tag_name);
@@ -12,6 +14,9 @@ async function getTagNames() {
 }
 
 async function getOrderCounts(tagName: string) {
+  // @ts-ignore
+  const { db } = await import("./duckdb");
+
   const conn = await db.connect();
   const statement = await conn.prepare("\
     SELECT tag_order, count(image_name) as ct FROM image_metadata\
