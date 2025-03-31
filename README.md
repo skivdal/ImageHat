@@ -4,6 +4,7 @@
 **ImageHat** is a Python package designed to extract and inspect metadata from binary image and video files. The project focuses on providing a powerful yet user-friendly interface for analyzing EXIF metadata, identifying structural properties, and enabling deeper insights into file formats like JPEG, MP4, and more. 
 
 Whether you're working with digital images or videos, **ImageHat** equips you with the tools to parse, visualize, and manage metadata directly from binary data.
+ImageHat is still in development and is limited to: **.JPEG, .JPG**
 
 ---
 
@@ -33,7 +34,7 @@ EXIF (Exchangeable Image File Format) metadata provides essential information ab
 ### Getting Started
 #### Requirements
 - Python 3.8 or later
-- Required Python Libraries: `os`, `struct`, `pytest`, `pytest-cov`, etc.
+- Required Python Libraries: all current dependecies are built-in
 
 #### Installation
 ##### **- 1 Clone the Repository**
