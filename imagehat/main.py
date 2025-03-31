@@ -1,7 +1,7 @@
 import os
 import os.path
 import struct
-from identifiers.constants import (
+from imagehat.identifiers.constants import (
     MARKER_SEGMENTS_JPEG_ADDRESS,
     MARKER_SEGMENTS_JPEG_NAME,
     IDENTIFIERS,
@@ -14,7 +14,7 @@ from imagehat.identifiers.eixf_attribute_information import (
     EXIF_TAG_DICT_REV,
     GPS_TAG_DICT_REV,
 )
-from identifiers.valid_formats import VALID_FORMATS
+from imagehat.identifiers.valid_formats import VALID_FORMATS
 
 
 class ImageHat:
@@ -199,19 +199,20 @@ class ImageHat:
 
         # Setting endianness for the rest of runtime
         endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
-        report["Byte Order"] = endianness_report
+        report["Byte Order"] = repr(endianness_report)
 
         # Recording magic number (s.b. 2 bytes)
         magic_number = self._convert_internal_identifier(
             endianness, "H", "tiff_magic_number"
         )
+
         magic_number_offset = self._APP1_SEGMENT.find(magic_number)
 
         magic_number_bytes = self._APP1_SEGMENT[
             magic_number_offset : magic_number_offset + 2
         ]  # Read raw bytes
         magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
-        report["TIFF Magic Number"] = magic_number_bytes
+        report["TIFF Magic Number"] = repr(magic_number_bytes)
         report["TIFF Magic Number Offset"] = magic_number_offset
 
         ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
@@ -233,7 +234,7 @@ class ImageHat:
         ifd_entries = struct.unpack(
             f"{endianness}H", self._APP1_SEGMENT[ifd_start : ifd_start + 2]
         )[0]
-        report["0th IFD bytes"] = ifd_offset_bytes
+        report["0th IFD bytes"] = repr(ifd_offset_bytes)
         report["0th IFD offset"] = ifd_offset
         report["0th IFD start"] = ifd_start
         report["Entries in 0th IFD"] = ifd_entries
@@ -443,13 +444,13 @@ class ImageHat:
             return {
                 "Markup": f"[{entry_offset}:{entry_offset+12}]",
                 "Absolute Offset": entry_offset,
-                "TIFF offset": entry_offset - tiff_offset,
+                "TIFF Offset": entry_offset - tiff_offset,
                 "Recorded Type": data_type,
                 "Type": dt,
                 "Doc Type": doc_type,
                 "Count": count,
                 "Content Location": content_offset,
-                "Content": bytes(content_bytes),
+                "Content Bytes": repr(content_bytes),
                 "Content Value": value,
                 "Tag Order": order,
                 # "Status": None,  # Advanced setting, in development
@@ -458,12 +459,15 @@ class ImageHat:
         return {
             "Markup": f"[{entry_offset}:{entry_offset+12}]",
             "Absolute Offset": entry_offset,
-            "TIFF offset": entry_offset - tiff_offset,
+            "TIFF Offset": entry_offset - tiff_offset,
             "Recorded Type": data_type,
             "Type": dt,
             "Doc Type": doc_type,
             "Count": count,
-            "Content": hex(value),
+            # "Content Bytes": struct.pack(f"{endianness}I", value),
+            "Content Bytes": repr(
+                value.to_bytes(4, byteorder="little" if endianness == "<" else "big")
+            ),
             "Content Value": value,
             "Tag Order": order,
             # "Status": None,  # Advanced setting, in development
@@ -525,7 +529,9 @@ class ImageHat:
         This method scans the JPEG file for EXIF data within the APP1 segment and
         returns a structured metadata report.
 
-        :return: A dictionary containing the file name and extracted EXIF metadata.
+        :return: A dictionary containing:
+            - **File Name**: self.img_path
+            - **EXIF Info** (*dict*): The information located within the file APP1 section emphasizing EXIF information.
         :rtype: dict
 
         """
@@ -585,9 +591,16 @@ class ImageHat:
         }
 
     @classmethod
-    def get_image_datas(cls, folder_path: str, verbose: str = "complete") -> list[dict]:
+    def get_image_datas(
+        cls,
+        folder_path: str,
+        verbose: str = "complete",
+        limit: int = None,
+        segment: tuple[int, int] = None,
+    ) -> list[dict]:
         """
         Generates metadata reports for all images in a given folder.
+        NOTE: For single image data retrieval, please use get_exig_image_data() or get_complete_image_data().
 
         This method scans the provided folder for JPEG images and extracts metadata
         based on the specified verbosity level.
@@ -596,9 +609,15 @@ class ImageHat:
         :type folder_path: str
 
         :param verbose: Specifies the level of metadata extraction. Options:
-            - **"complete"** (*default*): Extracts full metadata.
-            - **"exif"**: Extracts only EXIF metadata.
+            - complete (default): Extracts full metadata, fetches get_complete_image_data().
+            - exif: Extracts only EXIF metadata, fetches get_exif_image_data().
         :type verbose: str, optional
+
+        :param limit: Defines the portion of the folder you wish to fetch.
+        :type limit: int
+
+        :param segment: Defines a segment of the folder you wish to fetch.
+        :type segmnet: tuple(int, int)
 
         :return: A list of dictionaries, where each dictionary contains metadata for an image.
         :rtype: list[dict]
@@ -607,7 +626,7 @@ class ImageHat:
         if not os.path.isdir(folder_path):
             raise ValueError("Invalid folder path.")
 
-        # Get all JPEG images
+        # Get all JPEG images from a folder
         image_files = [
             os.path.join(folder_path, f)
             for f in os.listdir(folder_path)
@@ -616,6 +635,13 @@ class ImageHat:
 
         if not image_files:
             raise ValueError("No valid images found in the folder.")
+
+        if segment:
+            start, end = segment
+            image_files = image_files[start:end]
+
+        if limit is not None:
+            image_files = image_files[:limit]
 
         # Generate reports
         if verbose == "complete":
@@ -639,7 +665,10 @@ if __name__ == "__main__":
 
     # # NOTE: Testing on all camera models in Dresden Dataset
     testset_folder = os.path.join("tests", "testsets", "testset-small")
-    # list_of_images = [os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)]
-    # images = [ImageHat(img) for img in list_of_images]
-    exif_dicts = ImageHat.get_image_datas(testset_folder)
-    print(exif_dicts[1])
+    temp_folder = os.path.join("datasets", "archive", "Dresden_Exp", "Samsung_L74wide")
+    list_of_images = [
+        os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
+    ]
+    images = [ImageHat(img) for img in list_of_images]
+
+    print(images[0].get_complete_image_data())
