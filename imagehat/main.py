@@ -17,7 +17,7 @@ from imagehat.identifiers.eixf_attribute_information import (
 from imagehat.identifiers.valid_formats import VALID_FORMATS
 
 
-class ImageHat:
+class JPEGParser:
     """
     The JPEGParser class is a sub class of the ImageHat super class. It is designed to analyze binary image files and
     extract EXIF metadata directly from from binary image files. It supports methods for parsing JPEG, extracting EXIF
@@ -27,14 +27,14 @@ class ImageHat:
     Example Usage:
     --------------
     ```
-    >>> image = ImageHat("sample.jpg")
+    >>> image = JPEGParser("sample.jpg")
     >>> markers = image.get_image_data(verbose="exif")
     >>> print(markers)
     ```
 
     ```
     >>> testset_folder = os.path.join("tests", "testsets", "testset-small")
-    >>> exif_dicts = ImageHat.get_image_datas(testset_folder)
+    >>> exif_dicts = JPEGParser.get_image_datas(testset_folder)
     ```
     """
 
@@ -108,7 +108,7 @@ class ImageHat:
 
     def __str__(self) -> str:
         """
-        Method used to show basic information the ImageHat object.
+        Method used to show basic information the JPEGParser object.
         """
         return f"ImageHat: {self.img_path}, Size: {len(self.binary_repr)} bytes"
 
@@ -658,7 +658,7 @@ if __name__ == "__main__":
 
     # NOTE Use the below lines to test
     # file_path_img = r"tests\testsets\testset-small\Sony_DSC_H50_Sony_DSC-H50_0_47713.JPG"
-    # img = ImageHat(file_path_img)
+    # img = JPEGParser(file_path_img)
     # meta = img_get_image_data()
     # print(meta)
     # print(meta["APP1 Info"]["EXIF Info"]["EXIF DATA"])
@@ -666,9 +666,10 @@ if __name__ == "__main__":
     # # NOTE: Testing on all camera models in Dresden Dataset
     testset_folder = os.path.join("tests", "testsets", "testset-small")
     temp_folder = os.path.join("datasets", "archive", "Dresden_Exp", "Samsung_L74wide")
+
     list_of_images = [
         os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
     ]
-    images = [ImageHat(img) for img in list_of_images]
+    images = [JPEGParser(img) for img in list_of_images]
 
     print(images[0].get_complete_image_data())

@@ -50,13 +50,13 @@ cd ImageHat
 - For windows (CMD, Terminal or PowerShell)
 ```sh
 python -m venv .venv
-venv\Scripts\activate
+source .venv\Scripts\activate
 ```
 
 - For macOS/Linux (Terminal)
 ```sh 
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 ##### **- 3 Install Dependencies**
@@ -64,6 +64,11 @@ source venv/bin/activate
 ```sh
 pip install -r requirements.txt
 ```
+or if you are also using uv:
+```
+uv pip install -r requirements.txt
+```
+
 
 Sometimes you may need to create a symlink:
 ```sh
@@ -73,10 +78,15 @@ pip install -e .
 
 #### Example Usage
 ```python
-from imagehat import ImageHat
+from imagehat import JPEGParser
 
 # Initialize with a file path
-file_path = "path/to/your/image.jpg"
+file_path_image_ex = "path/to/your/image.jpg"
+testset_folder_ex = os.path.join("tests", "testsets", "testset-small") # testset_small or testset_large is included
+
+img = JPEGParser.get_info
+print(JPEGParser.# Do it manually
+
 image = ImageHat(file_path)
 
 # Verify the file type and structure
