@@ -637,7 +637,11 @@ class JPEGParser:
                 raise ValueError("No valid images found in the folder.")
 
         elif isinstance(images, list):
-            JPEGParser._verbosed_output(images, verbose=verbose)
+            image_files = images  # already JPEGParser instances
+        else:
+            raise TypeError(
+                "images must be either a folder path or a list of JPEGParser instances."
+            )
 
         if segment:
             start, end = segment
@@ -646,9 +650,10 @@ class JPEGParser:
         if limit is not None:
             image_files = image_files[:limit]
 
-        JPEGParser._verbosed_output(images, verbose=verbose)
+        return cls._verbosed_output(image_files, verbose=verbose)
 
-    def _verbosed_output(cls, image_files: list, verbose: str):
+    @classmethod
+    def _verbosed_output(cls, image_files: list, verbose: str) -> list[dict]:
         """
         Helper method for get_image_datas() class method. Used for line reusability.
 
@@ -662,11 +667,20 @@ class JPEGParser:
         :rtype: list[dict]
 
         """
+        if not image_files:
+            return []
+
+        # If we are dealing with JPEGParser instances or image paths
+        if isinstance(image_files[0], str):
+            image_objects = [cls(img) for img in image_files]
+        else:
+            image_objects = image_files
+
         # Generate reports
         if verbose == "complete":
-            return [cls(img).get_complete_image_data() for img in image_files]
+            return [cls(img).get_complete_image_data() for img in image_objects]
         elif verbose == "exif":
-            return [cls(img).get_exif_image_data() for img in image_files]
+            return [cls(img).get_exif_image_data() for img in image_objects]
         else:
             raise ValueError(
                 "Valid verbose option not used. Please choose 'complete' or 'exif'."
