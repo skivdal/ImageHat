@@ -122,7 +122,41 @@ class JPEGParser:
             return self.binary_repr[:end]
         return self.binary_repr[start:end]
 
-    def _read_jpeg_markers(self) -> dict[int | list[int]]:
+    # def _read_jpeg_markers(self) -> dict[int | list[int]]:
+    #     """
+    #     Identifies and extracts key JPEG markers in the binary image.
+
+    #     This method scans the binary representation of the image to locate JPEG markers,
+    #     count their occurrences, and determine their byte offsets. Currently, it is limited
+    #     to finding only the **first** occurrence of each marker, as overlapping markers
+    #     make deeper analysis challenging
+
+    #     .. note::
+    #         Due to the complexity of marker placement in JPEG images, this method does not
+    #         guarantee the extraction of all markers if multiple overlapping occurences exist.
+    #         As they usually do.
+
+    #     :return: A dictionary where keys represent marker names, and values contain marker-specific
+    #              metadata, including occurrence count and byte offsets.
+    #     :rtype: dict
+
+    #     """
+    #     marker_info = {}
+
+    #     for marker, name in MARKER_SEGMENTS_JPEG_ADDRESS.items():
+    #         offset = []
+    #         pos = self.binary_repr.find(marker)  # Find first occurrence
+
+    #         while pos != -1:
+    #             offset.append(pos)
+    #             pos = self.binary_repr.find(marker, pos + 1)  # Find next occurrence
+
+    #         if offset:  # Only store markers that were found
+    #             marker_info[name] = {"count": len(offset), "offset": offset}
+    #     print(marker_info)
+    #     return marker_info
+
+    def _read_jpeg_markers(self) -> dict[int | list[int]]:  # NOTE: beta
         """
         Identifies and extracts key JPEG markers in the binary image.
 
@@ -141,19 +175,55 @@ class JPEGParser:
         :rtype: dict
 
         """
-        marker_info = {}
+        pos = 0
+        markers = {}
 
-        for marker, name in MARKER_SEGMENTS_JPEG_ADDRESS.items():
-            offset = []
-            pos = self.binary_repr.find(marker)  # Find first occurrence
+        while pos < len(self.binary_repr):
+            if self.binary_repr[pos] != 0xFF:
+                pos += 1
+                continue
 
-            while pos != -1:
-                offset.append(pos)
-                pos = self.binary_repr.find(marker, pos + 1)  # Find next occurrence
+            marker_byte = self.binary_repr[pos + 1]
+            if marker_byte == 0x00:
+                pos += 2
+                continue
 
-            if offset:  # Only store markers that were found
-                marker_info[name] = {"count": len(offset), "offset": offset}
-        return marker_info
+            marker = bytes([0xFF, marker_byte])
+            marker_name = MARKER_SEGMENTS_JPEG_ADDRESS.get(
+                marker, f"Unknown_{marker.hex().upper()}"
+            )
+
+            if marker_name not in markers:
+                markers[marker_name] = "Unknown Marker"
+
+            # SOI and EOI have no byte size
+            if marker in [b"\xff\xd8", b"\xff\xd9"]:
+                markers[marker_name] = {
+                    "offset": pos,
+                    "size": None,
+                    # "data": self.binary_repr[pos : pos + 2], # No need for this
+                }
+                pos += 2
+                continue
+
+            # Error handling incase of out of bounds
+            if pos + 4 > len(self.binary_repr):
+                break
+
+            segment_size = int.from_bytes(self.binary_repr[pos + 2 : pos + 4], "big")
+            segment_end = pos + 2 + segment_size
+
+            # Error handling incase of out of bounds
+            if segment_end > len(self.binary_repr):
+                break
+
+            markers[marker_name] = {
+                "offset": pos,
+                "size": segment_size,
+            }
+
+            pos = segment_end  # move to next marker
+        return markers
 
     def _read_app1_segment(self, app1_offset: int) -> dict:
         """
@@ -538,6 +608,7 @@ class JPEGParser:
 
         # Extract JPEG markers
         jpeg_marker_info = self._read_jpeg_markers()
+        print(jpeg_marker_info["APP1"])
 
         if "APP1" not in jpeg_marker_info:
             return {"error": "No APP1 segment found in the image."}
@@ -567,12 +638,13 @@ class JPEGParser:
 
         # Extract JPEG markers
         jpeg_marker_info = self._read_jpeg_markers()
+        print(jpeg_marker_info["APP1"]["offset"])
 
         if "APP1" not in jpeg_marker_info:
             return {"error": "No APP1 segment found in the image."}
 
         # Extract APP1 segment and EXIF data
-        app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
+        app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
         # exif_data = app1_info.get("EXIF Info", {})
 
         # Construct full report
@@ -704,6 +776,8 @@ if __name__ == "__main__":
     ]
 
     images = [JPEGParser(img) for img in list_of_images]
-    meta = images[0].get_complete_image_data()["APP1 Info"]["EXIF Info"]["EXIF Data"]
+    # meta = images[0].get_complete_image_data()["APP1 Info"]["EXIF Info"]["EXIF Data"]
+    meta = images[0].get_complete_image_data()
+
     for k, v in meta.items():
         print(k, v)
