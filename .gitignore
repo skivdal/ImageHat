@@ -173,6 +173,6 @@ tests/testsets/create_json_dataset.py
 tests/testsets/get_testset.py
 
 # Parser
-parsers/
+parsers/*.py
 !parsers/jpeg_parser.py
-
+!parsers/
