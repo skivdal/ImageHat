@@ -4,7 +4,6 @@ MARKER_SEGMENTS_JPEG_NAME = {
     # Start/End of Image
     "SOI": b"\xff\xd8",  # (Start of Image)
     "EOI": b"\xff\xd9",  # (End of Image)
-
     # Application Markers (APPn)
     "APP0": b"\xff\xe0",  # (JFIF Application Marker)
     "APP1": b"\xff\xe1",  # (EXIF Application Marker)
@@ -22,15 +21,12 @@ MARKER_SEGMENTS_JPEG_NAME = {
     "APP13": b"\xff\xed",  # Photoshop IPTC
     "APP14": b"\xff\xee",  # Adobe
     "APP15": b"\xff\xef",
-
     # Comment
     "COM": b"\xff\xfe",  # Comment
-
     # Define Markers
     "DQT": b"\xff\xdb",  # (Define Quantization Table)
     "DHT": b"\xff\xc4",  # (Define Huffman Table)
     "DRI": b"\xff\xdd",  # (Restart Interval)
-
     # Start of Frame Markers
     "SOF0": b"\xff\xc0",  # (Start of Frame | Baseline DCT)
     "SOF1": b"\xff\xc1",  # (Start of Frame | Extended Sequential DCT)
@@ -41,9 +37,8 @@ MARKER_SEGMENTS_JPEG_NAME = {
 
 MARKER_SEGMENTS_JPEG_ADDRESS = {
     # Start/End of Image
-    b"\xff\xd8": "SOI",   # (Start of Image)
-    b"\xff\xd9": "EOI",   # (End of Image)
-
+    b"\xff\xd8": "SOI",  # (Start of Image)
+    b"\xff\xd9": "EOI",  # (End of Image)
     # Application Markers (APPn)
     b"\xff\xe0": "APP0",  # (JFIF Application Marker)
     b"\xff\xe1": "APP1",  # (EXIF Application Marker)
@@ -61,23 +56,19 @@ MARKER_SEGMENTS_JPEG_ADDRESS = {
     b"\xff\xed": "APP13",  # Photoshop IPTC
     b"\xff\xee": "APP14",  # Adobe
     b"\xff\xef": "APP15",
-
     # Comment
-    b"\xff\xfe": "COM",    # (Comment)
-
+    b"\xff\xfe": "COM",  # (Comment)
     # Define Markers
-    b"\xff\xdb": "DQT",    # (Define Quantization Table)
-    b"\xff\xc4": "DHT",    # (Define Huffman Table)
-    b"\xff\xdd": "DRI",    # (Restart Interval)
-
+    b"\xff\xdb": "DQT",  # (Define Quantization Table)
+    b"\xff\xc4": "DHT",  # (Define Huffman Table)
+    b"\xff\xdd": "DRI",  # (Restart Interval)
     # Start of Frame Markers
-    b"\xff\xc0": "SOF0",   # (Start of Frame | Baseline DCT)
-    b"\xff\xc1": "SOF1",   # (Start of Frame | Extended Sequential DCT)
-    b"\xff\xc2": "SOF2",   # (Start of Frame | Progressive DCT)
-    b"\xff\xc3": "SOF3",   # (Start of Frame | Lossless JPEG)
-
+    b"\xff\xc0": "SOF0",  # (Start of Frame | Baseline DCT)
+    b"\xff\xc1": "SOF1",  # (Start of Frame | Extended Sequential DCT)
+    b"\xff\xc2": "SOF2",  # (Start of Frame | Progressive DCT)
+    b"\xff\xc3": "SOF3",  # (Start of Frame | Lossless JPEG)
     # Scan Header
-    b"\xff\xda": "SOS",    # (Scan Header)
+    b"\xff\xda": "SOS",  # (Scan Header)
 }
 
 

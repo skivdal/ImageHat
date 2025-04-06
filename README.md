@@ -100,7 +100,7 @@ testset_folder = os.path.join("tests", "testsets", "testset-small") # testset_sm
 img = JPEGParser(file_path_image)
 print(img.get_exif_image_data())
 
-# Apply the method on a folder 
+# Apply the method on a folder
 images = JPEGParser.get_image_datas(folder_path=testset_)
 
 # Find and summarize metadata

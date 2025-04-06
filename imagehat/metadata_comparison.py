@@ -1,5 +1,9 @@
+# NOTE: This is a base skeleton that works as a placekeeper for future improvement (or deletion)
+# This will probably not work.
+
+
 import os
-from imagehat.main import ImageHat
+from imagehat.main import JPEGParser
 
 
 class MetadataComparison:
@@ -77,7 +81,7 @@ class MetadataComparison:
                 if os.path.splitext(f)[1].lower() in cls.PARSER_MAPPING
             ]
         else:
-            if not all(isinstance(img, ImageHat) for img in list_of_images):
+            if not all(isinstance(img, JPEGParser) for img in list_of_images):
                 raise ValueError(
                     "All elements in list_of_images must be ImageHat instances."
                 )
