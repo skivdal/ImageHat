@@ -593,7 +593,7 @@ class JPEGParser:
     @classmethod
     def get_image_datas(
         cls,
-        folder_path: str,
+        images: str | list["JPEGParser"],
         verbose: str = "complete",
         limit: int = None,
         segment: tuple[int, int] = None,
@@ -622,19 +622,22 @@ class JPEGParser:
         :return: A list of dictionaries, where each dictionary contains metadata for an image.
         :rtype: list[dict]
         """
+        if isinstance(images, str):
+            if not os.path.isdir(images):
+                raise ValueError("Invalid folder path.")
 
-        if not os.path.isdir(folder_path):
-            raise ValueError("Invalid folder path.")
+            # Get all JPEG images from a folder
+            image_files = [
+                os.path.join(images, f)
+                for f in os.listdir(images)
+                if f.lower().endswith((".jpg", ".jpeg"))
+            ]
 
-        # Get all JPEG images from a folder
-        image_files = [
-            os.path.join(folder_path, f)
-            for f in os.listdir(folder_path)
-            if f.lower().endswith((".jpg", ".jpeg"))
-        ]
+            if not image_files:
+                raise ValueError("No valid images found in the folder.")
 
-        if not image_files:
-            raise ValueError("No valid images found in the folder.")
+        elif isinstance(images, list):
+            JPEGParser._verbosed_output(images, verbose=verbose)
 
         if segment:
             start, end = segment
@@ -643,6 +646,22 @@ class JPEGParser:
         if limit is not None:
             image_files = image_files[:limit]
 
+        JPEGParser._verbosed_output(images, verbose=verbose)
+
+    def _verbosed_output(cls, image_files: list, verbose: str):
+        """
+        Helper method for get_image_datas() class method. Used for line reusability.
+
+        :param image_files: List of JPEGParser objects.
+        :type image_files: list
+
+        :param verbose: The correct verbose mode for choosing the correct method.
+        :type verbose: str
+
+        :return: List containing all the images and their recorded content.
+        :rtype: list[dict]
+
+        """
         # Generate reports
         if verbose == "complete":
             return [cls(img).get_complete_image_data() for img in image_files]
@@ -665,11 +684,12 @@ if __name__ == "__main__":
 
     # # NOTE: Testing on all camera models in Dresden Dataset
     testset_folder = os.path.join("tests", "testsets", "testset-small")
-    temp_folder = os.path.join("datasets", "archive", "Dresden_Exp", "Samsung_L74wide")
 
     list_of_images = [
         os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
     ]
-    images = [JPEGParser(img) for img in list_of_images]
 
-    print(images[0].get_complete_image_data())
+    images = [JPEGParser(img) for img in list_of_images]
+    meta = images[0].get_complete_image_data()["APP1 Info"]["EXIF Info"]["EXIF Data"]
+    for k, v in meta.items():
+        print(k, v)
