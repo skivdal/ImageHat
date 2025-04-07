@@ -2,14 +2,14 @@ import os
 import os.path
 import struct
 from imagehat.identifiers.jpeg_specific_identifiers import (
+    CHARACTER_IDENTIFIER_CODES,
     IDENTIFIERS,
-    EXIF_IFDS
+    EXIF_IFD_POINTERS,
 )
-from imagehat.identifiers.jpeg_marker_segments import {
+from imagehat.identifiers.jpeg_marker_segments import (
     MARKER_SEGMENTS_JPEG_ADDRESS,
     MARKER_SEGMENTS_JPEG_NAME,
-    CHARACTER_IDENTIFIER_CODES
-}
+)
 from imagehat.identifiers.eixf_attribute_information import (
     TAG_TYPES,
     OVERFLOW_TYPES,
@@ -242,6 +242,7 @@ class JPEGParser:
         :rtype: dict
         """
         report = {}
+
         # Recording APP1 segment size (s.b. 2 bytes)
         app1_size = int.from_bytes(
             self.binary_repr[app1_offset + 2 : app1_offset + 4], byteorder="big"
@@ -322,6 +323,15 @@ class JPEGParser:
         )
         report["EXIF Info"] = exif_information
 
+        # Recoring the GPS EXIF tags.
+        gps_information = self._read_gps_ifd(
+            ifd_start=ifd_start,
+            num_entries=ifd_entries,
+            tiff_header_offset=byte_order_offset,
+            endianness=endianness,
+        )
+        report["GPS Info"] = gps_information
+
         return report
 
     def _find_target_byte(self, data: bytes, targets: list[bytes]) -> None | int | str:
@@ -377,6 +387,7 @@ class JPEGParser:
             f"{endianness}{datatype}", unpacked_value
         )  # Repack value according to correct endianness
 
+    # # NOTE: This is the first EXIF IFD parser method only capable of retrieving EXIF tags from the EXIF IFD
     # def _read_exif_ifd(
     #     self, ifd_start: int, num_entries: int, tiff_header_offset: int, endianness: str
     # ) -> dict:
@@ -402,6 +413,7 @@ class JPEGParser:
     #     # This loop starts at the recorded start of the first ifd,
     #     # skips the 2 num_entries bytes, and iterates over each entry.
     #     exif_ifd_offset = None
+
     #     for entry in range(num_entries):
     #         entry_offset = ifd_start + 2 + (entry * 12)
     #         tag, datatype, count, value_offset = struct.unpack(
@@ -453,14 +465,34 @@ class JPEGParser:
 
     #     report["EXIF Data"] = exif_data
     #     return report
+
     def _read_exif_ifd(
         self, ifd_start: int, num_entries: int, tiff_header_offset: int, endianness: str
     ) -> dict:
-        report = {}
-        exif_ifd_offset = None
-        gps_ifd_offset = None
-        interoperability_ifd_offset = None
+        """
+        Parses and reads the identified argumented Image File Directory (IFD) and extracts its related tags.
 
+        This method reads the IFD, identifies its entries, and extracts metadata tags.
+
+        :param ifd_start: The absolute offset where the IFD starts.
+        :type ifd_start: int
+        :param num_entries: The number of directory entries in the IFD.
+        :type num_entries: int
+        :param tiff_header_offset: The offset of the TIFF header within the EXIF data.
+        :type tiff_header_offset: int
+        :param endianness: The byte order used for reading the EXIF metadata (">" for big-endian, "<" for little-endian).
+        :type endianness: str
+
+        :return: A dictionary containing extracted EXIF tags and their values.
+        :rtype: dict
+        """
+
+        report = {}
+
+        exif_ifd_offset = None
+
+        # This loop starts at the recorded start of the first ifd,
+        # skips the 2 num_entries bytes, and iterates over each entry.
         for entry in range(num_entries):
             entry_offset = ifd_start + 2 + (entry * 12)
             tag, datatype, count, value_offset = struct.unpack(
@@ -468,48 +500,125 @@ class JPEGParser:
                 self._APP1_SEGMENT[entry_offset : entry_offset + 12],
             )
             hex_tag = tag.to_bytes(2, "big")
-
-            if hex_tag == EXIF_IFDS["exif_ifd_pointer"]:
+            if hex_tag == EXIF_IFD_POINTERS["exif_ifd_pointer"]:  # Exif IFD Pointer
                 exif_ifd_offset = tiff_header_offset + value_offset
-                report["Exif IFD pointer found"] = True
-            elif hex_tag == EXIF_IFDS["gps_ifd_pointer"]:
+                report["Exif IFD pointer found"] = bool(tag)
+
+        if not exif_ifd_offset:
+            return {"Exif IFD Pointer not found"}
+
+        # Read number of entries in Exif IFD
+        num_exif_entries = struct.unpack(
+            f"{endianness}H", self._APP1_SEGMENT[exif_ifd_offset : exif_ifd_offset + 2]
+        )[0]
+        report["Number of Exif Entries"] = num_exif_entries
+
+        # Extract key EXIF tags
+        exif_data = {}
+
+        # Iterate over the Exif specific IFD entries
+        for i in range(num_exif_entries):
+            entry_offset = exif_ifd_offset + 2 + (i * 12)  # Rec
+            tag, datatype, count, value = struct.unpack(
+                f"{endianness}HHII",
+                self._APP1_SEGMENT[entry_offset : entry_offset + 12],
+            )
+
+            tag_bytes = tag.to_bytes(
+                2, byteorder="big"
+            )  # Convert integer tag to byte format
+            if tag_bytes in EXIF_TAG_DICT_REV:
+                tag_name = EXIF_TAG_DICT_REV[tag_bytes]
+                # if tag_name == "MakerNote": break # Just for now
+                exif_data[tag_name] = self._parse_tag(
+                    tag=tag,
+                    data_type=datatype,
+                    count=count,
+                    value=value,
+                    entry_offset=entry_offset,
+                    tiff_offset=tiff_header_offset,
+                    endianness=endianness,
+                    order=i,
+                )
+
+        report["EXIF Data"] = exif_data
+        return report
+
+    def _read_gps_ifd(
+        self, ifd_start: int, num_entries: int, tiff_header_offset: int, endianness: str
+    ) -> dict:
+        """
+        Parses and reads the identified argumented Image File Directory (IFD) and extracts its related tags.
+
+        This method reads the IFD, identifies its entries, and extracts metadata tags.
+
+        :param ifd_start: The absolute offset where the IFD starts.
+        :type ifd_start: int
+        :param num_entries: The number of directory entries in the IFD.
+        :type num_entries: int
+        :param tiff_header_offset: The offset of the TIFF header within the EXIF data.
+        :type tiff_header_offset: int
+        :param endianness: The byte order used for reading the EXIF metadata (">" for big-endian, "<" for little-endian).
+        :type endianness: str
+
+        :return: A dictionary containing extracted EXIF tags and their values.
+        :rtype: dict
+        """
+        report = {}
+
+        gps_ifd_offset = None
+
+        # This loop starts at the recorded start of the first ifd,
+        # skips the 2 num_entries bytes, and iterates over each entry.
+        for entry in range(num_entries):
+            entry_offset = ifd_start + 2 + (entry * 12)
+            tag, datatype, count, value_offset = struct.unpack(
+                f"{endianness}HHII",
+                self._APP1_SEGMENT[entry_offset : entry_offset + 12],
+            )
+            hex_tag = tag.to_bytes(2, "big")
+            if hex_tag == EXIF_IFD_POINTERS["gps_ifd_pointer"]:  # Exif IFD Pointer
                 gps_ifd_offset = tiff_header_offset + value_offset
-                report["GPS IFD pointer found"] = True
-            elif hex_tag == EXIF_IFDS["interoperability_ifd_pointer"]:
-                interoperability_ifd_offset = tiff_header_offset + value_offset
-                report["Interop IFD pointer found"] = True
+                report["GPS IFD pointer found"] = bool(tag)
 
-        def parse_ifd(offset, name):
-            parsed = {}
-            if offset:
-                entries = struct.unpack(
-                    f"{endianness}H",
-                    self._APP1_SEGMENT[offset : offset + 2]
-                )[0]
-                for i in range(entries):
-                    entry_offset = offset + 2 + (i * 12)
-                    tag, datatype, count, value = struct.unpack(
-                        f"{endianness}HHII",
-                        self._APP1_SEGMENT[entry_offset : entry_offset + 12]
-                    )
-                    tag_bytes = tag.to_bytes(2, "big")
-                    tag_name = EXIF_TAG_DICT_REV.get(tag_bytes, f"Unknown_{tag_bytes.hex()}")
-                    parsed[tag_name] = self._parse_tag(
-                        tag=tag,
-                        data_type=datatype,
-                        count=count,
-                        value=value,
-                        entry_offset=entry_offset,
-                        tiff_offset=tiff_header_offset,
-                        endianness=endianness,
-                        order=i,
-                    )
-            return parsed
+        if not gps_ifd_offset:
+            return {"GPS IFD Pointer not found"}
 
-        report["EXIF Data"] = parse_ifd(exif_ifd_offset, "EXIF")
-        report["GPS Data"] = parse_ifd(gps_ifd_offset, "GPS")
-        report["Interop Data"] = parse_ifd(interoperability_ifd_offset, "Interop")
+        # Read number of entries in Exif IFD
+        num_gps_entries = struct.unpack(
+            f"{endianness}H", self._APP1_SEGMENT[gps_ifd_offset : gps_ifd_offset + 2]
+        )[0]
+        report["Number of GPS Entries"] = num_gps_entries
 
+        # Extract key EXIF tags
+        gps_data = {}
+
+        # Iterate over the Exif specific IFD entries
+        for i in range(num_gps_entries):
+            entry_offset = gps_ifd_offset + 2 + (i * 12)  # Rec
+            tag, datatype, count, value = struct.unpack(
+                f"{endianness}HHII",
+                self._APP1_SEGMENT[entry_offset : entry_offset + 12],
+            )
+
+            tag_bytes = tag.to_bytes(
+                2, byteorder="big"
+            )  # Convert integer tag to byte format
+            if tag_bytes in GPS_TAG_DICT_REV:
+                tag_name = GPS_TAG_DICT_REV[tag_bytes]
+                # if tag_name == "MakerNote": break # Just for now
+                gps_data[tag_name] = self._parse_tag(
+                    tag=tag,
+                    data_type=datatype,
+                    count=count,
+                    value=value,
+                    entry_offset=entry_offset,
+                    tiff_offset=tiff_header_offset,
+                    endianness=endianness,
+                    order=i,
+                )
+
+        report["GPS EXIF Data"] = gps_data
         return report
 
     def _parse_tag(
@@ -700,7 +809,6 @@ class JPEGParser:
 
         # Extract JPEG markers
         jpeg_marker_info = self._read_jpeg_markers()
-        print(jpeg_marker_info["APP1"]["offset"])
 
         if "APP1" not in jpeg_marker_info:
             return {"error": "No APP1 segment found in the image."}
@@ -720,7 +828,7 @@ class JPEGParser:
                 "file_size_bytes": f"{file_size} bytes",
                 "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
             },
-            "jpeg_markers": jpeg_marker_info,
+            "JPEG Marker Segments": jpeg_marker_info,
             "APP1 Info": app1_info,
         }
 
@@ -841,5 +949,7 @@ if __name__ == "__main__":
     # meta = images[0].get_complete_image_data()["APP1 Info"]["EXIF Info"]["EXIF Data"]
     meta = images[0].get_complete_image_data()
 
-    for k, v in meta.items():
-        print(k, v)
+    # for k, v in meta.items():
+    #     print(k, v)
+
+    print(images[0].binary_repr[:1000].find(EXIF_IFD_POINTERS["gps_ifd_pointer"]))

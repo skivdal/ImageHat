@@ -6,9 +6,6 @@ IDENTIFIERS = {
     "MM": b"\x4d\x4d",  # Motorola byte order, MSB first
     "tiff_magic_number": b"\x00\x2a",  # TIFF magic number verifies TIFF
     "offset_first_ifd": b"\x00\x00\x00\x08",  # Offset to the start  of the first IFD
-    "exif_ifd_pointer": b"\x87\x69",  # The EXIF IFD pointer
-    "gps_ifd_pointer": b"\x88\x25",  # The GPS IFD pointer
-    "interoperatbility_ifd_pointer": b"\xa0\x05",  # The Interoperability IFD pointer
 }
 
 # Used for indentifying character information in byte chuncks that are of type UNDEFINED
@@ -19,7 +16,7 @@ CHARACTER_IDENTIFIER_CODES = {
     "undefined_cc": b"\x00\x00\x00\x00\x00\x00\x00\x00",  # No specific character code encoding (any)
 }
 
-EXIF_IFDS = {
+EXIF_IFD_POINTERS = {
     "exif_ifd_pointer": b"\x87\x69",
     "gps_ifd_pointer": b"\x88\x25",
     "interoperability_ifd_pointer": b"\xa0\x05",

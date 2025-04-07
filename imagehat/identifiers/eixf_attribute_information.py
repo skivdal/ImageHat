@@ -1,3 +1,12 @@
+# IMPORTANT NOTE: EXIF Tags build upon the TIFF structure, but EXIF is an extension of TIFF (superset). 
+# They share the same underlying data strcuture.
+# NOTE TIFF: Describes image structure and storage. Focus on internal strucuture.
+# NOTE EXIF: Specifically designed for photographic metadata.
+# NOTE: ALL information is directly derived from the JEITA ISO standard documentation.
+# NOTE: The first IFD (0th IFD) contains TIFF tags
+# Note: The second IFD (1st IFD) contains thumbnail IFD tags. These are identical 
+
+
 # Types related to tags according to the EXIF standard
 # These types are represented in bits/bytes
 BYTE = 1  # An 8-bit unsigned integer.
@@ -237,13 +246,17 @@ EXIF_GPS_TAGS = {
 
 # Tags related to interoperability. The tag(s) of this dictionary are set to
 # indicate which type of operability standard the image follows.
+# The Interop tag is supposed to be recorded inside
 INTEROP_EXIF_TAGS = {
     # Attached information realted to interoperability
-    "InteroperabilityIndex": {"tag": b"\x01", "type": "ASCII", "count": "Any"}
+    "InteroperabilityIndex": {"tag": b"\x00\x01", "type": "ASCII", "count": "Any"},
+    "InteroperabilityVersion": {"tag": b"\x00\x02", "type": "UNDEFINED", "count": 4},
+    "RelatedImageWidth": {"tag": b"\x10\x01", "type": "SHORT or LONG", "count": 1},
+    "RelatedImageLength": {"tag": b"\x10\x02", "type": "SHORT or LONG", "count": 1}
 }
 
 # These are TIFF specific tags that are not a part of the EXIF standard, but found in the 0th IFD header
-TIFF_IFD_TAGS = {
+TIFF_TAGS = {
     # A. Tags relating to image data structure
     "ImageWidth": {"tag": b"\x01\x00", "type": "SHORT or LONG", "count": 1},
     "ImageLength": {"tag": b"\x01\x01", "type": "SHORT or LONG", "count": 1},
@@ -253,7 +266,6 @@ TIFF_IFD_TAGS = {
     "ImageDescription": {"tag": b"\x01\x0e", "type": "ASCII or UTF-8", "count": "Any"},
     "Make": {"tag": b"\x01\x0f", "type": "ASCII or UTF-8", "count": "Any"},
     "Model": {"tag": b"\x01\x10", "type": "ASCII or UTF-8", "count": "Any"},
-
     # B. Tags relating to recording offset
     "StripOffsets": {"tag": b"\x01\x11", "type": "SHORT or LONG", "count": "Any"},
     "Orientation": {"tag": b"\x01\x12", "type": "SHORT", "count": 1},
@@ -264,7 +276,6 @@ TIFF_IFD_TAGS = {
     "YResolution": {"tag": b"\x01\x1b", "type": "RATIONAL", "count": 1},
     "PlanarConfiguration": {"tag": b"\x01\x1c", "type": "SHORT", "count": 1},
     "ResolutionUnit": {"tag": b"\x01\x28", "type": "SHORT", "count": 1},
-
     # C. Tags relating to image data characteristics
     "TransferFunction": {"tag": b"\x01\x2d", "type": "SHORT", "count": "768 (256×3)"},
     "Software": {"tag": b"\x01\x31", "type": "ASCII or UTF-8", "count": "Any"},
@@ -272,39 +283,25 @@ TIFF_IFD_TAGS = {
     "Artist": {"tag": b"\x01\x3b", "type": "ASCII or UTF-8", "count": "Any"},
     "WhitePoint": {"tag": b"\x01\x3e", "type": "RATIONAL", "count": 2},
     "PrimaryChromaticities": {"tag": b"\x01\x3f", "type": "RATIONAL", "count": 6},
-
     # JPEG thumbnail support
     "JPEGInterchangeFormat": {"tag": b"\x02\x01", "type": "LONG", "count": 1},
     "JPEGInterchangeFormatLength": {"tag": b"\x02\x02", "type": "LONG", "count": 1},
-
     # YCbCr-related
     "YCbCrCoefficients": {"tag": b"\x02\x11", "type": "RATIONAL", "count": 3},
     "YCbCrSubSampling": {"tag": b"\x02\x12", "type": "SHORT", "count": 2},
     "YCbCrPositioning": {"tag": b"\x02\x13", "type": "SHORT", "count": 1},
     "ReferenceBlackWhite": {"tag": b"\x02\x14", "type": "RATIONAL", "count": 6},
-
     # D. Other Tags
     "Copyright": {"tag": b"\x82\x98", "type": "ASCII or UTF-8", "count": "Any"},
-
     # Pointers
     "ExifIFDPointer": {"tag": b"\x87\x69", "type": "LONG", "count": 1},
-    "GPSInfoIFDPointer": {"tag": b"\x88\x25", "type": "LONG", "count": 1}
+    "GPSInfoIFDPointer": {"tag": b"\x88\x25", "type": "LONG", "count": 1},
 }
 
+TIFF_TAG_DICT_REV = {v["tag"]: k for k, v in TIFF_TAGS.items()}
 
-
-THUMBNAIL_IFD_TAGS = {}
-
-EXIF_TAG_DICT_REV = {v["tag"]: k for k, v in EXIF_TAGS.items()}
+EXIF_TAG_DICT_REV = {v["tag"]: k for k, v in {**EXIF_TAGS, **INTEROP_EXIF_TAGS}.items()}
 # EXIF_TAG_DICT = {**EXIF_TAGS_REVERSED}
 
 GPS_TAG_DICT_REV = {v["tag"]: k for k, v in EXIF_GPS_TAGS.items()}
 # EXIF_GPS_TAG_DICT = {**GPS_TAGS_REVERSED}
-
-INTEROP_TAG_DICT_REV = {v["tag"]: k for k, v in INTEROP_EXIF_TAGS.items()}
-
-
-# IMPORTANT NOTE: EXIF Tags build upon the TIFF structure, but EXIF is an extension of TIFF (superset). They share the same underlying data strcuture.
-# NOTE TIFF: Describes image structure and storage. Focus on internal strucuture.
-# NOTE EXIF: Specifically designed for photographic metadata.
-# NOTE: ALL information is directly derived from the JEITA ISO standard documentation.
