@@ -1,10 +1,10 @@
-# IMPORTANT NOTE: EXIF Tags build upon the TIFF structure, but EXIF is an extension of TIFF (superset). 
+# IMPORTANT NOTE: EXIF Tags build upon the TIFF structure, but EXIF is an extension of TIFF (superset).
 # They share the same underlying data strcuture.
 # NOTE TIFF: Describes image structure and storage. Focus on internal strucuture.
 # NOTE EXIF: Specifically designed for photographic metadata.
 # NOTE: ALL information is directly derived from the JEITA ISO standard documentation.
 # NOTE: The first IFD (0th IFD) contains TIFF tags
-# Note: The second IFD (1st IFD) contains thumbnail IFD tags. These are identical 
+# Note: The second IFD (1st IFD) contains thumbnail IFD tags. These are identical
 
 
 # Types related to tags according to the EXIF standard
@@ -205,10 +205,16 @@ EXIF_TAGS = {
         "type": "ASCII or UTF-8",
         "count": "Any",
     },
+    # Interoperability Offset
+    "InteroperabilityIFDPointer": {
+        "tag": b"\xa0\x05",
+        "type": "LONG",
+        "count": 1,
+    },
 }
 
 # EXIF tags related to GPS
-EXIF_GPS_TAGS = {
+GPS_EXIF_TAGS = {
     "GPSVersionID": {"tag": b"\x00", "type": "BYTE", "count": 4},
     "GPSLatitudeRef": {"tag": b"\x01", "type": "ASCII", "count": 2},
     "GPSLatitude": {"tag": b"\x02", "type": "RATIONAL", "count": 3},
@@ -243,7 +249,6 @@ EXIF_GPS_TAGS = {
     "GPSHPositioningError": {"tag": b"\x1f", "type": "RATIONAL", "count": 1},
 }
 
-
 # Tags related to interoperability. The tag(s) of this dictionary are set to
 # indicate which type of operability standard the image follows.
 # The Interop tag is supposed to be recorded inside
@@ -251,8 +256,9 @@ INTEROP_EXIF_TAGS = {
     # Attached information realted to interoperability
     "InteroperabilityIndex": {"tag": b"\x00\x01", "type": "ASCII", "count": "Any"},
     "InteroperabilityVersion": {"tag": b"\x00\x02", "type": "UNDEFINED", "count": 4},
+    "RelatedImageFileFormat": {"tag": b"\x10\x00", "type": "ASCII", "count": "Any"},
     "RelatedImageWidth": {"tag": b"\x10\x01", "type": "SHORT or LONG", "count": 1},
-    "RelatedImageLength": {"tag": b"\x10\x02", "type": "SHORT or LONG", "count": 1}
+    "RelatedImageLength": {"tag": b"\x10\x02", "type": "SHORT or LONG", "count": 1},
 }
 
 # These are TIFF specific tags that are not a part of the EXIF standard, but found in the 0th IFD header
@@ -301,7 +307,7 @@ TIFF_TAGS = {
 TIFF_TAG_DICT_REV = {v["tag"]: k for k, v in TIFF_TAGS.items()}
 
 EXIF_TAG_DICT_REV = {v["tag"]: k for k, v in {**EXIF_TAGS, **INTEROP_EXIF_TAGS}.items()}
-# EXIF_TAG_DICT = {**EXIF_TAGS_REVERSED}
 
-GPS_TAG_DICT_REV = {v["tag"]: k for k, v in EXIF_GPS_TAGS.items()}
-# EXIF_GPS_TAG_DICT = {**GPS_TAGS_REVERSED}
+INTEROP_TAG_DICT_REV = {v["tag"]: k for k, v in INTEROP_EXIF_TAGS.items()}
+
+GPS_TAG_DICT_REV = {v["tag"]: k for k, v in GPS_EXIF_TAGS.items()}
