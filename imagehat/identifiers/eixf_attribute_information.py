@@ -221,7 +221,7 @@ GPS_EXIF_TAGS = {
     "GPSLongitudeRef": {"tag": b"\x03", "type": "ASCII", "count": 2},
     "GPSLongitude": {"tag": b"\x04", "type": "RATIONAL", "count": 3},
     "GPSAltitudeRef": {"tag": b"\x05", "type": "BYTE", "count": 1},
-    "GPSAltitude": {"tag": b"\x06", "type": "RATIONAL", "count": 1},
+    "GPSAltitude": {"tag": b"\x06", "type": "RATIONAL", "counts": 1},
     "GPSTimeStamp": {"tag": b"\x07", "type": "RATIONAL", "count": 3},
     "GPSSatellites": {"tag": b"\x08", "type": "ASCII", "count": "Any"},
     "GPSStatus": {"tag": b"\x09", "type": "ASCII", "count": 2},

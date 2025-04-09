@@ -173,6 +173,10 @@ tests/testsets/create_json_dataset.py
 tests/testsets/get_testset.py
 
 # Parser
-parsers/*.py
-!parsers/jpeg_parser.py
-!parsers/
+imagehat/parsers/heic_parser.py
+imagehat/parsers/mov_parser.py
+imagehat/parsers/png_parser.py
+imagehat/parsers/tiff_parser.py
+imagehat/parsers/webp_parser.py
+
+
