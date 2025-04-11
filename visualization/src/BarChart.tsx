@@ -1,25 +1,28 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 
-interface DataPoint {
+export interface DataPoint {
   tagOrder: string;
   count: number;
 }
 
 interface BarChartProps {
   data: DataPoint[];
+  message: string;
 }
 
-const BarChart: React.FC<BarChartProps> = ({ data }) => {
+
+// @ts-ignore
+const BarChart: React.FC<BarChartProps> = ({ data, message}) => {
   const ref = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
     if (data.length === 0) return;
 
     const svg = d3.select(ref.current);
-    const width = 500;
+    const width = 600;
     const height = 300;
-    const margin = { top: 20, right: 30, bottom: 40, left: 40 };
+    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
 
     const x = d3
       .scaleBand()
@@ -43,14 +46,21 @@ const BarChart: React.FC<BarChartProps> = ({ data }) => {
 
     svg
       .append('g')
-      .attr('fill', 'steelblue')
+      .attr('fill', '#535bf2')
+      .attr('hover', '#646cff')
       .selectAll('rect')
       .data(data)
       .join('rect')
       .attr('x', d => x(d.tagOrder) as number)
       .attr('y', d => y(d.count))
       .attr('height', d => y(0) - y(d.count))
-      .attr('width', x.bandwidth());
+      .attr('width', x.bandwidth())
+      .on('mouseover', function (){
+        d3.select(this).attr('fill', '#646cff');
+      })
+      .on('mouseout', function(){
+        d3.select(this).attr('fill', '#535bf2');
+      });
 
     svg
       .append('g')
@@ -61,6 +71,22 @@ const BarChart: React.FC<BarChartProps> = ({ data }) => {
       .append('g')
       .attr('transform', `translate(${margin.left},0)`)
       .call(d3.axisLeft(y));
+
+    svg.append("text")
+        .attr("class", "x label")
+        .attr("text-anchor", "end")
+        .attr("x", width/2 + 45)
+        .attr("y", height - 6)
+        .text("Location");
+
+    svg.append("text")
+        .attr("class", "y label")
+        .attr("text-anchor", "middle")
+        .attr("x", -height / 2)
+        .attr("y", 2)
+        .attr("dy", ".55em")
+        .attr("transform", "rotate(-90)")
+        .text(message);
   }, [data]);
 
   return <svg ref={ref}></svg>;
