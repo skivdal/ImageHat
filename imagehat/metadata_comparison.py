@@ -3,7 +3,7 @@
 
 
 import os
-from imagehat.main import JPEGParser
+from imagehat.parsers.jpeg_parser import JPEGParser
 
 
 class MetadataComparison:

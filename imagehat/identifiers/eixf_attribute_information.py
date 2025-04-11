@@ -311,3 +311,12 @@ EXIF_TAG_DICT_REV = {v["tag"]: k for k, v in {**EXIF_TAGS, **INTEROP_EXIF_TAGS}.
 INTEROP_TAG_DICT_REV = {v["tag"]: k for k, v in INTEROP_EXIF_TAGS.items()}
 
 GPS_TAG_DICT_REV = {v["tag"]: k for k, v in GPS_EXIF_TAGS.items()}
+
+
+ALL_TAGS = {**TIFF_TAGS, **EXIF_TAGS, **GPS_EXIF_TAGS, **INTEROP_EXIF_TAGS}
+ALL_TAGS_REV = {
+    **TIFF_TAG_DICT_REV,
+    **EXIF_TAG_DICT_REV,
+    **INTEROP_TAG_DICT_REV,
+    **GPS_TAG_DICT_REV,
+}
