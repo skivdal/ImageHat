@@ -7,3 +7,5 @@ JPEG_EXTENSIONS = [
     ".jfif",
     ".jfi",
 ]
+
+VIDEO_EXTENSIONS = [".mp4", ".mov"]

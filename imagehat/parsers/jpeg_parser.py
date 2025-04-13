@@ -44,16 +44,20 @@ class JPEGParser:
     ```
     """
 
-    def __init__(self, img_path):
+    def __init__(self, img_path: str):
         self.img_path: str = img_path
         self._validate_file_path()
         self.binary_repr: bytes = (
             self.get_binary_data()
         )  # creates hexadecimal representaion
         self._APP1_SEGMENT = None
-        self.file_info: None | dict = None
-        self.app1_info: None | dict = None
-        self.exif_info: None | dict = None
+        self.file_data: dict | None = None
+        self.app1_data: dict | None = None
+        self.exif_ifd_data: dict | None = None
+        self.gps_ifd_data: dict | None = None
+        self.interop_ifd_data: dict | None = None
+        self.first_ifd_data: dict | None = None
+        self.thumbnail_ifd_data: dict | None = None
 
     def get_binary_data(self) -> bytes:
         """
@@ -91,6 +95,7 @@ class JPEGParser:
             )
 
         try:
+            # Easy validation, should be rendered
             with open(self.img_path, "rb") as f:
                 header = f.read(2)
                 if (
@@ -287,7 +292,8 @@ class JPEGParser:
                 endianness=endianness,
             )
             report["0th IFD Information"] = first_ifd_info
-            report["0th IFD Tags"] = tiff_data
+            report["0th IFD Data"] = tiff_data
+            self.first_ifd_data = tiff_data
 
         # Recoring the EXIF IFD.
         # The EXIF IFD includes Camera Device Realted tags, pointer to the Interoperability IFD.
@@ -299,7 +305,8 @@ class JPEGParser:
                 endianness=endianness,
             )
             report["EXIF IFD Info"] = exif_ifd_info
-            report["EXIF IFD Tags"] = exif_data
+            report["EXIF IFD Data"] = exif_data
+            self.exif_ifd_data = exif_data
 
         # Recoring the GPS EXIF tags.
         if first_ifd_info["Offset to GPS IFD"]:
@@ -309,7 +316,9 @@ class JPEGParser:
                 tiff_header_offset=byte_order_offset,
                 endianness=endianness,
             )
-            report["GPS IFD Tags"] = gps_data
+            report["GPS IFD Data"] = gps_data
+
+            self.gps_ifd_data = gps_data
 
         # Recoring the GPS EXIF tags.
         if exif_ifd_info["Offset to Interop IFD"]:
@@ -319,19 +328,19 @@ class JPEGParser:
                 tiff_header_offset=byte_order_offset,
                 endianness=endianness,
             )
-            report["Interop IFD Tags"] = interop_data
+            report["Interop IFD Data"] = interop_data
+            self.interop_ifd_data = interop_data
 
         # Recording the Thumbnail TIFF Tags.
-        print(first_ifd_info["Offset to 1st IFD"])
-        print(first_ifd_info["Number of 1st IFD Entries"])
         if first_ifd_info["Offset to 1st IFD"]:
-            next_ifd = self._read_thumbnail_ifd(
+            thumbnail_data = self._read_thumbnail_ifd(
                 ifd_start=first_ifd_info["Offset to 1st IFD"],
                 num_entries=first_ifd_info["Number of 1st IFD Entries"],
                 tiff_header_offset=byte_order_offset,
                 endianness=endianness,
             )
-            report["1st IFD Tags"] = next_ifd
+            report["1st IFD Data"] = thumbnail_data
+            self.thumbnail_ifd_data = thumbnail_data
 
         return report
 
@@ -504,7 +513,6 @@ class JPEGParser:
                 f"{endianness}HHII",
                 self._APP1_SEGMENT[entry_offset : entry_offset + 12],
             )
-            print(self._APP1_SEGMENT[entry_offset : entry_offset + 12])
             tag_bytes = tag.to_bytes(
                 2, byteorder="big"
             )  # Convert integer tag to byte format
@@ -619,7 +627,7 @@ class JPEGParser:
                 order=entry,
             )
 
-        return (gps_data,)
+        return gps_data
 
     def _read_interop_ifd(
         self, ifd_start: int, num_entries: int, tiff_header_offset: int, endianness: str
@@ -823,12 +831,16 @@ class JPEGParser:
             return {"error": "No APP1 segment found in the image."}
 
         # Extract APP1 segment and EXIF data
-        app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"][0])
-        exif_data = app1_info.get("EXIF Info", {})
+        app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
+        self.app1_data = app1_data
+
+        exif_data = app1_data.get("EXIF IFD Data", {"error": "No EXIF IFD data found."})
+        gps_data = app1_data.get("GPS IFD Data", {"error": "No GPS IFD data found."})
+        interop_data = app1_data.get("Interop IFD Data", {"error": "No Interop IFD data found."})
 
         return {
             "file_name": self.img_path,
-            "exif_info": exif_data,
+            "exif_data": {**exif_data, **gps_data, **interop_data},
         }  # Return only EXIF data
 
     def get_complete_image_data(self) -> dict:
@@ -852,8 +864,8 @@ class JPEGParser:
             return {"error": "No APP1 segment found in the image."}
 
         # Extract APP1 segment and EXIF data
-        app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
-        # exif_data = app1_info.get("EXIF Info", {})
+        app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
+        self.app1_data = app1_data
 
         # Construct full report
         _, file_ext = os.path.splitext(self.img_path)
@@ -867,7 +879,7 @@ class JPEGParser:
                 "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
             },
             "JPEG Marker Segments": jpeg_marker_info,
-            "APP1 Info": app1_info,
+            "APP1 Info": app1_data,
         }
 
     @classmethod
@@ -985,8 +997,10 @@ if __name__ == "__main__":
 
     images = [JPEGParser(img) for img in list_of_images]
 
-    meta = images[1].get_complete_image_data()
+    # meta = images[1].get_complete_image_data()
+    meta = images[1].get_exif_image_data()
 
-    for k, v in meta["APP1 Info"].items():
+    # for k, v in meta["APP1 Info"].items():
+    for k, v in meta.items():
         print(k, v)
         print("\n\n")
