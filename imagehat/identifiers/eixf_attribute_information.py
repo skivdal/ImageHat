@@ -4,7 +4,7 @@
 # NOTE EXIF: Specifically designed for photographic metadata.
 # NOTE: ALL information is directly derived from the JEITA ISO standard documentation.
 # NOTE: The first IFD (0th IFD) contains TIFF tags
-# Note: The second IFD (1st IFD) contains thumbnail IFD tags. These are identical
+# NOTE: The second IFD (1st IFD) contains thumbnail IFD tags. These are identical
 
 
 # Types related to tags according to the EXIF standard

@@ -1,8 +1,9 @@
 import os
 import os.path
 import struct
+from imagehat.identifiers.extensions import JPEG_EXTENSIONS
+
 from imagehat.identifiers.jpeg_specific_identifiers import (
-    # CHARACTER_IDENTIFIER_CODES,
     IDENTIFIERS,
     EXIF_IFD_POINTERS,
 )
@@ -20,7 +21,10 @@ from imagehat.identifiers.eixf_attribute_information import (
     ALL_TAGS,
     ALL_TAGS_REV,
 )
-from imagehat.identifiers.extensions import JPEG_EXTENSIONS
+from imagehat.identifiers.iptc_attribute_information import (
+    IPTC_TAGS,
+    IPTC_TAGS_DICT_REV,
+)
 
 
 class JPEGParser:
@@ -50,7 +54,8 @@ class JPEGParser:
         self.binary_repr: bytes = (
             self.get_binary_data()
         )  # creates hexadecimal representaion
-        self._APP1_SEGMENT = None
+        self._APP1_SEGMENT = bytes | None
+        self._APP13_SEGMENT = bytes | None
         self.file_data: dict | None = None
         self.app1_data: dict | None = None
         self.exif_ifd_data: dict | None = None
@@ -133,7 +138,7 @@ class JPEGParser:
             return self.binary_repr[:end]
         return self.binary_repr[start:end]
 
-    def _read_jpeg_markers(self) -> dict[int | list[int]]:  # NOTE: beta
+    def _read_jpeg_markers(self) -> dict[int | list[int]]:
         """
         Identifies and extracts key JPEG markers in the binary image.
 
@@ -152,64 +157,69 @@ class JPEGParser:
         :rtype: dict
 
         """
-        pos = 0
-        markers = {}
+        try:
+            pos = 0
+            markers = {}
 
-        while pos < len(self.binary_repr):
-            if self.binary_repr[pos] != 0xFF:
-                pos += 1
-                continue
+            while pos < len(self.binary_repr):
+                if self.binary_repr[pos] != 0xFF:
+                    pos += 1
+                    continue
 
-            marker_byte = self.binary_repr[pos + 1]
-            if marker_byte == 0x00:
-                pos += 2
-                continue
+                marker_byte = self.binary_repr[pos + 1]
+                if marker_byte == 0x00:
+                    pos += 2
+                    continue
 
-            marker = bytes([0xFF, marker_byte])
+                marker = bytes([0xFF, marker_byte])
 
-            if 0xD0 <= marker_byte <= 0xD7:
-                marker_name = f"RST{marker_byte - 0xD0}"
+                if 0xD0 <= marker_byte <= 0xD7:
+                    marker_name = f"RST{marker_byte - 0xD0}"
+                    markers[marker_name] = {
+                        "offset": pos,
+                        "size": None,  # RST markers are standalone and have no segment size
+                    }
+                    pos += 2
+                    continue
+
+                marker_name = MARKER_SEGMENTS_JPEG_ADDRESS.get(
+                    marker, f"Unknown_{marker.hex().upper()}"
+                )
+
+                if marker_name not in markers:
+                    markers[marker_name] = "Unknown Marker"
+
+                # SOI and EOI have no byte size
+                if marker in [b"\xff\xd8", b"\xff\xd9"]:
+                    markers[marker_name] = {
+                        "offset": pos,
+                        "size": None,
+                    }
+                    pos += 2
+                    continue
+
+                # Error handling incase of out of bounds
+                if pos + 4 > len(self.binary_repr):
+                    break
+
+                segment_size = int.from_bytes(
+                    self.binary_repr[pos + 2 : pos + 4], "big"
+                )
+                segment_end = pos + 2 + segment_size
+
+                # Error handling incase of out of bounds
+                if segment_end > len(self.binary_repr):
+                    break
+
                 markers[marker_name] = {
                     "offset": pos,
-                    "size": None,  # RST markers are standalone and have no segment size
+                    "size": segment_size,
                 }
-                pos += 2
-                continue
 
-            marker_name = MARKER_SEGMENTS_JPEG_ADDRESS.get(
-                marker, f"Unknown_{marker.hex().upper()}"
-            )
-
-            if marker_name not in markers:
-                markers[marker_name] = "Unknown Marker"
-
-            # SOI and EOI have no byte size
-            if marker in [b"\xff\xd8", b"\xff\xd9"]:
-                markers[marker_name] = {
-                    "offset": pos,
-                    "size": None,
-                }
-                pos += 2
-                continue
-
-            # Error handling incase of out of bounds
-            if pos + 4 > len(self.binary_repr):
-                break
-
-            segment_size = int.from_bytes(self.binary_repr[pos + 2 : pos + 4], "big")
-            segment_end = pos + 2 + segment_size
-
-            # Error handling incase of out of bounds
-            if segment_end > len(self.binary_repr):
-                break
-
-            markers[marker_name] = {
-                "offset": pos,
-                "size": segment_size,
-            }
-
-            pos = segment_end  # move to next marker
-        return markers
+                pos = segment_end  # move to next marker
+            return markers
+        except Exception as e:
+            return {"[ERROR]": f"Failed to parse JPEG marker segments: {e}"}
 
     def _read_app1_segment(self, app1_offset: int) -> dict:
         """
@@ -223,135 +233,144 @@ class JPEGParser:
                  size, position, structural integrity, but also .
         :rtype: dict
         """
-        report = {}
+        try:
+            report = {}
 
-        # Recording APP1 segment size (s.b. 2 bytes)
-        app1_size = int.from_bytes(
-            self.binary_repr[app1_offset + 2 : app1_offset + 4], byteorder="big"
-        )
-
-        report["APP1 Size"] = app1_size  # For latter, add failsafe if segment > 64 kb
-
-        # Recording start of APP1 segment
-        app1_location_start = app1_offset
-        report["Start of APP1"] = app1_location_start
-
-        # Recording end of APP1 segment
-        app1_location_end = app1_offset + app1_size
-        report["End of APP1"] = app1_location_end
-        self._APP1_SEGMENT = self.binary_repr[
-            app1_location_start : app1_location_start + app1_size
-        ]
-
-        # Recording EXIF identifier (s.b. 4 bytes, 6 bytes including padding)
-        exif_identifier = self._APP1_SEGMENT.find(IDENTIFIERS["exif_identifier"])
-        report["EXIF Identifier Offset"] = exif_identifier if exif_identifier else None
-
-        # Recording byte order (should be 2 bytes)
-        # Recodring endianness starts here. EXIF is big-endian until byte-order is discovered.
-        byte_order_offset, endianness_report = self._find_target_byte(
-            self._APP1_SEGMENT[:25], targets=[IDENTIFIERS["II"], IDENTIFIERS["MM"]]
-        )
-        byte_order_bytes = self._APP1_SEGMENT[byte_order_offset : byte_order_offset + 2]
-
-        # Setting endianness for the rest of runtime
-        endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
-        report["Byte Order"] = repr(endianness_report)
-
-        # Recording magic number (should be 2 bytes)
-        magic_number = self._convert_internal_identifier(
-            endianness, "H", "tiff_magic_number"
-        )
-        magic_number_offset = self._APP1_SEGMENT.find(magic_number)
-        magic_number_bytes = self._APP1_SEGMENT[
-            magic_number_offset : magic_number_offset + 2
-        ]
-        magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
-        report["TIFF Magic Number Offset"] = magic_number_offset
-
-        ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
-        ### Always unpack constants in big endian from project files.
-        comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
-        report["TIFF Validity"] = magic_number == comp_magic_number
-
-        # Recording offset to first IDF (should be 4 bytes)
-        ifd_temp = self._convert_internal_identifier(
-            endianness=endianness, datatype="I", id="offset_first_ifd"
-        )
-        ifd_offset = self._APP1_SEGMENT.find(ifd_temp)
-        ifd_offset_bytes = self._APP1_SEGMENT[ifd_offset : ifd_offset + 4]
-        ifd_start = (
-            byte_order_offset + struct.unpack(f"{endianness}I", ifd_offset_bytes)[0]
-        )
-
-        # Entries recorded within the 0th IFD
-        ifd_entries = struct.unpack(
-            f"{endianness}H", self._APP1_SEGMENT[ifd_start : ifd_start + 2]
-        )[0]
-        report["0th IFD Offset"] = ifd_offset
-        report["Entries in 0th IFD"] = ifd_entries
-
-        # Recording the 0th tags. NOTE: Most important, do not touch.
-        # The 0th IFD includes Image Related tags, pointer to the GPS IFD and the EXIF IFD.
-        if report["0th IFD Offset"]:
-            first_ifd_info, tiff_data = self._read_first_ifd(
-                ifd_start=ifd_start,
-                num_entries=ifd_entries,
-                tiff_header_offset=byte_order_offset,
-                endianness=endianness,
+            # Recording APP1 segment size (s.b. 2 bytes)
+            app1_size = int.from_bytes(
+                self.binary_repr[app1_offset + 2 : app1_offset + 4], byteorder="big"
             )
-            report["0th IFD Information"] = first_ifd_info
-            report["0th IFD Data"] = tiff_data
-            self.first_ifd_data = tiff_data
 
-        # Recoring the EXIF IFD.
-        # The EXIF IFD includes Camera Device Realted tags, pointer to the Interoperability IFD.
-        if first_ifd_info["Offset to EXIF IFD"]:
-            exif_ifd_info, exif_data = self._read_exif_ifd(
-                ifd_start=first_ifd_info["Offset to EXIF IFD"],
-                num_entries=first_ifd_info["Number of EXIF Entries"],
-                tiff_header_offset=byte_order_offset,
-                endianness=endianness,
+            report["APP1 Size"] = (
+                app1_size  # For latter, add failsafe if segment > 64 kb
             )
-            report["EXIF IFD Info"] = exif_ifd_info
-            report["EXIF IFD Data"] = exif_data
-            self.exif_ifd_data = exif_data
 
-        # Recoring the GPS EXIF tags.
-        if first_ifd_info["Offset to GPS IFD"]:
-            gps_data = self._read_gps_ifd(
-                ifd_start=first_ifd_info["Offset to GPS IFD"],
-                num_entries=first_ifd_info["Number of GPS Entries"],
-                tiff_header_offset=byte_order_offset,
-                endianness=endianness,
+            # Recording start of APP1 segment
+            app1_location_start = app1_offset
+            report["Start of APP1"] = app1_location_start
+
+            # Recording end of APP1 segment
+            app1_location_end = app1_offset + app1_size
+            report["End of APP1"] = app1_location_end
+            self._APP1_SEGMENT = self.binary_repr[
+                app1_location_start : app1_location_start + app1_size
+            ]
+
+            # Recording EXIF identifier (s.b. 4 bytes, 6 bytes including padding)
+            exif_identifier = self._APP1_SEGMENT.find(IDENTIFIERS["exif_identifier"])
+            report["EXIF Identifier Offset"] = (
+                exif_identifier if exif_identifier else None
             )
-            report["GPS IFD Data"] = gps_data
 
-            self.gps_ifd_data = gps_data
-
-        # Recoring the GPS EXIF tags.
-        if exif_ifd_info["Offset to Interop IFD"]:
-            interop_data = self._read_interop_ifd(
-                ifd_start=exif_ifd_info["Offset to Interop IFD"],
-                num_entries=exif_ifd_info["Number of Interop Entries"],
-                tiff_header_offset=byte_order_offset,
-                endianness=endianness,
+            # Recording byte order (should be 2 bytes)
+            # Recodring endianness starts here. EXIF is big-endian until byte-order is discovered.
+            byte_order_offset, endianness_report = self._find_target_byte(
+                self._APP1_SEGMENT[:25], targets=[IDENTIFIERS["II"], IDENTIFIERS["MM"]]
             )
-            report["Interop IFD Data"] = interop_data
-            self.interop_ifd_data = interop_data
+            byte_order_bytes = self._APP1_SEGMENT[
+                byte_order_offset : byte_order_offset + 2
+            ]
 
-        # Recording the Thumbnail TIFF Tags.
-        if first_ifd_info["Offset to 1st IFD"]:
-            thumbnail_data = self._read_thumbnail_ifd(
-                ifd_start=first_ifd_info["Offset to 1st IFD"],
-                num_entries=first_ifd_info["Number of 1st IFD Entries"],
-                tiff_header_offset=byte_order_offset,
-                endianness=endianness,
+            # Setting endianness for the rest of runtime
+            endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
+            report["Byte Order"] = repr(endianness_report)
+
+            # Recording magic number (should be 2 bytes)
+            magic_number = self._convert_internal_identifier(
+                endianness, "H", "tiff_magic_number"
             )
-            report["1st IFD Data"] = thumbnail_data
-            self.thumbnail_ifd_data = thumbnail_data
+            magic_number_offset = self._APP1_SEGMENT.find(magic_number)
+            magic_number_bytes = self._APP1_SEGMENT[
+                magic_number_offset : magic_number_offset + 2
+            ]
+            magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
+            report["TIFF Magic Number Offset"] = magic_number_offset
 
-        return report
+            ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
+            ### Always unpack constants in big endian from project files.
+            comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
+            report["TIFF Validity"] = magic_number == comp_magic_number
+
+            # Recording offset to first IDF (should be 4 bytes)
+            ifd_temp = self._convert_internal_identifier(
+                endianness=endianness, datatype="I", id="offset_first_ifd"
+            )
+            ifd_offset = self._APP1_SEGMENT.find(ifd_temp)
+            ifd_offset_bytes = self._APP1_SEGMENT[ifd_offset : ifd_offset + 4]
+            ifd_start = (
+                byte_order_offset + struct.unpack(f"{endianness}I", ifd_offset_bytes)[0]
+            )
+
+            # Entries recorded within the 0th IFD
+            ifd_entries = struct.unpack(
+                f"{endianness}H", self._APP1_SEGMENT[ifd_start : ifd_start + 2]
+            )[0]
+            report["0th IFD Offset"] = ifd_offset
+            report["Entries in 0th IFD"] = ifd_entries
+
+            # Recording the 0th tags. NOTE: Most important, do not touch.
+            # The 0th IFD includes Image Related tags, pointer to the GPS IFD and the EXIF IFD.
+            if report["0th IFD Offset"]:
+                first_ifd_info, tiff_data = self._read_first_ifd(
+                    ifd_start=ifd_start,
+                    num_entries=ifd_entries,
+                    tiff_header_offset=byte_order_offset,
+                    endianness=endianness,
+                )
+                report["0th IFD Information"] = first_ifd_info
+                report["0th IFD Data"] = tiff_data
+                self.first_ifd_data = tiff_data
+
+            # Recoring the EXIF IFD.
+            # The EXIF IFD includes Camera Device Realted tags, pointer to the Interoperability IFD.
+            if first_ifd_info["Offset to EXIF IFD"]:
+                exif_ifd_info, exif_data = self._read_exif_ifd(
+                    ifd_start=first_ifd_info["Offset to EXIF IFD"],
+                    num_entries=first_ifd_info["Number of EXIF Entries"],
+                    tiff_header_offset=byte_order_offset,
+                    endianness=endianness,
+                )
+                report["EXIF IFD Info"] = exif_ifd_info
+                report["EXIF IFD Data"] = exif_data
+                self.exif_ifd_data = exif_data
+
+            # Recoring the GPS EXIF tags.
+            if first_ifd_info["Offset to GPS IFD"]:
+                gps_data = self._read_gps_ifd(
+                    ifd_start=first_ifd_info["Offset to GPS IFD"],
+                    num_entries=first_ifd_info["Number of GPS Entries"],
+                    tiff_header_offset=byte_order_offset,
+                    endianness=endianness,
+                )
+                report["GPS IFD Data"] = gps_data
+
+                self.gps_ifd_data = gps_data
+
+            # Recoring the GPS EXIF tags.
+            if exif_ifd_info["Offset to Interop IFD"]:
+                interop_data = self._read_interop_ifd(
+                    ifd_start=exif_ifd_info["Offset to Interop IFD"],
+                    num_entries=exif_ifd_info["Number of Interop Entries"],
+                    tiff_header_offset=byte_order_offset,
+                    endianness=endianness,
+                )
+                report["Interop IFD Data"] = interop_data
+                self.interop_ifd_data = interop_data
+
+            # Recording the Thumbnail TIFF Tags.
+            if first_ifd_info["Offset to 1st IFD"]:
+                thumbnail_data = self._read_thumbnail_ifd(
+                    ifd_start=first_ifd_info["Offset to 1st IFD"],
+                    num_entries=first_ifd_info["Number of 1st IFD Entries"],
+                    tiff_header_offset=byte_order_offset,
+                    endianness=endianness,
+                )
+                report["1st IFD Data"] = thumbnail_data
+                self.thumbnail_ifd_data = thumbnail_data
+
+            return report
+        except Exception as e:
+            return {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
 
     def _find_target_byte(self, data: bytes, targets: list[bytes]) -> None | int | str:
         """
@@ -727,6 +746,7 @@ class JPEGParser:
 
         dt = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
         doc_type = self._get_tag_type(tag=tag, endianness=endianness)
+        doc_count = self._get_count(tag=tag, endianness=endianness)
 
         if dt in OVERFLOW_TYPES or count > 4:
             content_bytes = self._APP1_SEGMENT[
@@ -747,6 +767,7 @@ class JPEGParser:
                 "Type": dt,
                 "Doc Type": doc_type,
                 "Count": count,
+                "Doc Count": doc_count,
                 "Content Location": content_offset,
                 "Content Bytes": repr(content_bytes),
                 "Content Value": value,
@@ -762,6 +783,7 @@ class JPEGParser:
             "Type": dt,
             "Doc Type": doc_type,
             "Count": count,
+            "Doc Count": doc_count,
             "Content Bytes": repr(
                 value.to_bytes(4, byteorder="little" if endianness == "<" else "big")
             ),
@@ -770,7 +792,87 @@ class JPEGParser:
             # "Status": None,  # Advanced setting, in development
         }
 
-    def _get_tag_type(self, tag, endianness):
+    def _read_iptc_data(self, app13_bytes: bytes) -> dict:
+        """
+        Parses IPTC metadata from the APP13 segment and returns structured tag info.
+        """
+        iptc_data = {}
+        pos = 0
+        tag_order = 0
+
+        try:
+            while pos < len(app13_bytes):
+                if app13_bytes[pos : pos + 13] == b"Photoshop 3.0\x00":
+                    pos += 13
+                    continue
+
+                if app13_bytes[pos : pos + 4] == b"8BIM":
+                    resource_id = int.from_bytes(app13_bytes[pos + 4 : pos + 6], "big")
+                    name_len = app13_bytes[pos + 6]
+                    name_pad = 1 if name_len % 2 == 0 else 0
+                    size_start = pos + 6 + 1 + name_len + name_pad
+                    size = int.from_bytes(
+                        app13_bytes[size_start : size_start + 4], "big"
+                    )
+                    data_start = size_start + 4
+                    data_end = data_start + size
+
+                    if resource_id == 0x0404:
+                        iptc_block = app13_bytes[data_start:data_end]
+                        iptc_data.update(
+                            self._parse_iptc_fields(iptc_block, data_start, tag_order)
+                        )
+                    pos = data_end + (size % 2)
+                else:
+                    pos += 1
+        except Exception as e:
+            iptc_data = {"[ERROR]": f"Failed to parse APP13 segment: {e}"}
+
+        return iptc_data
+
+    def _parse_iptc_fields(
+        self, iptc_block: bytes, offset_start: int, tag_order: int
+    ) -> dict:
+        result = {}
+        pos = 0
+
+        while pos < len(iptc_block):
+            if iptc_block[pos] == 0x1C:
+                record = iptc_block[pos + 1]
+                tag = iptc_block[pos + 2]
+                length = int.from_bytes(iptc_block[pos + 3 : pos + 5], "big")
+                value_bytes = iptc_block[pos + 5 : pos + 5 + length]
+
+                tag_name = next(
+                    (
+                        name
+                        for name, props in IPTC_TAGS.items()
+                        if props["tag"] == tag and props.get("record", record) == record
+                    ),
+                    f"Unknown_{record}_{tag}",
+                )
+                absolute_offset = offset_start + pos
+                try:
+                    value = value_bytes.decode("utf-8", errors="replace")
+                except Exception:
+                    value = value_bytes.hex()
+
+                result[tag_name] = {
+                    "Absolute Offset": absolute_offset,
+                    "Content Bytes": repr(value_bytes),
+                    "Content Value": value,
+                    "Length": length,
+                    "Tag Order": tag_order,
+                }
+
+                tag_order += 1
+                pos += 5 + length
+            else:
+                pos += 1
+
+        return result
+
+    def _get_tag_type(self, tag: bytes, endianness: str) -> str:
         """
         Given a tag ID (in bytes) and endianness ('MM' = Big-Endian, 'II' = Little-Endian),
         returns the corresponding EXIF tag type from the TAG_TYPES dictionary.
@@ -791,6 +893,28 @@ class JPEGParser:
         if tag_name:
             tag_info = ALL_TAGS.get(tag_name)
             return tag_info["type"]
+
+    def _get_tag_type(self, tag: bytes, endianness: str) -> str:
+        """
+        Given a tag ID (in bytes) and endianness ('MM' = Big-Endian, 'II' = Little-Endian),
+        returns the corresponding EXIF count from the TAG_TYPES dictionary.
+
+        :param tag_bytes: The raw tag ID (e.g., b'\x90\x03').
+        :type tag_bytes: bytes
+
+        :return: The tag type (e.g., "ASCII", "RATIONAL") or None if not found.
+        :rtype: str
+        """
+        if endianness == "<":
+            tag_bytes = struct.pack(f">H", tag)
+        elif endianness == ">":
+            tag_bytes = struct.pack(f"{endianness}H", tag)
+
+        tag_name = ALL_TAGS_REV.get(tag_bytes)
+
+        if tag_name:
+            tag_info = ALL_TAGS.get(tag_name)
+            return tag_info["count"]
 
     def _parse_rational(
         self, content_bytes: bytes, endianness
@@ -850,8 +974,7 @@ class JPEGParser:
             gps_data = app1_data.get("GPS IFD Data", gps_data)
             interop_data = app1_data.get("Interop IFD Data", interop_data)
         else:
-            # print(f"[WARN] No APP1 segment found in {self.img_path}")
-            pass
+            return {"[ERROR]": "Failed to parse APP1 segment."}
 
         return {
             "file_name": self.img_path,
@@ -877,31 +1000,51 @@ class JPEGParser:
 
         # Prepare default APP1 response
         app1_data = {"[ERROR]": "APP1 segment not found."}
+        iptc_data = {"[ERROR]": "No APP13 segment found."}
 
-        if "APP1" in jpeg_marker_info:
+        # Parse APP13 if present
+        if "APP13" in jpeg_marker_info:
             try:
-                app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
-                self.app1_data = app1_data
+                app13_offset = jpeg_marker_info["APP13"]["offset"]
+                app13_size = jpeg_marker_info["APP13"]["size"]
+                app13_bytes = self.binary_repr[
+                    app13_offset + 4 : app13_offset + 2 + app13_size
+                ]
+                iptc_data = self._read_iptc_data(app13_bytes)
+
+                self._APP13_SEGMENT = self.binary_repr[
+                    app13_offset : app13_offset + app13_size
+                ]
             except Exception as e:
-                app1_data = {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
-                print(f"[WARN] APP1 parsing issue in {self.img_path}: {e}")
-        else:
-            print(f"[WARN] No APP1 segment found in {self.img_path}")
+                iptc_data = {"[ERROR]": f"Failed to parse APP13 segment: {e}"}
 
         # Construct full report
         _, file_ext = os.path.splitext(self.img_path)
         file_size = len(self.binary_repr)
 
-        return {
-            "General File Info": {
-                "file_name": self.img_path,
-                "file_format": file_ext,
-                "file_size_bytes": f"{file_size} bytes",
-                "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
-            },
-            "JPEG Marker Segments": jpeg_marker_info,
-            "APP1 Info": app1_data,
-        }
+        if not iptc_data:
+            return {
+                "General File Info": {
+                    "file_name": self.img_path,
+                    "file_format": file_ext,
+                    "file_size_bytes": f"{file_size} bytes",
+                    "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
+                },
+                "JPEG Marker Segments": jpeg_marker_info,
+                "APP1 Info": app1_data,
+            }
+        else:
+            return {
+                "General File Info": {
+                    "file_name": self.img_path,
+                    "file_format": file_ext,
+                    "file_size_bytes": f"{file_size} bytes",
+                    "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
+                },
+                "JPEG Marker Segments": jpeg_marker_info,
+                "APP1 Info": app1_data,
+                "IPTC Info": iptc_data,
+            }
 
     @classmethod
     def get_image_datas(
@@ -1032,14 +1175,24 @@ if __name__ == "__main__":
     # # NOTE: Testing on all camera models in Dresden Dataset
     testset_folder = os.path.join("tests", "testsets", "testset-small")
     # news_folder = os.path.join("datasets", "Downloaded_Images-20250405T145639Z-001", "Downloaded_Images")
-    news_folder = os.path.join("datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende")
+    news_folder = os.path.join(
+        "datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende"
+    )
     image_path = os.path.join(
-    "datasets",
-    "scraped_news_images",
-    "downloaded_images",   # ✅ Watch out for typos!
-    "Aftenposten",
-    "000f8538-a096-4975-b2df-9d352d8d8379.jpg"
-)
+        "datasets",
+        "scraped_news_images",
+        "downloaded_images",
+        "Aftenposten",
+        "000f8538-a096-4975-b2df-9d352d8d8379.jpg",
+    )
+    document_image = os.path.join(
+        "datasets",
+        "scraped_news_images",
+        "downloaded_images",
+        "Document",
+        "2560px-protest-against-dakota-access-and-keystone-xl-pipelines-20170126-1641-1140x756.jpg",
+    )
+
     # list_of_images = [
     #     os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
     # ]
@@ -1049,4 +1202,5 @@ if __name__ == "__main__":
         for fp in os.listdir(news_folder)
         if fp.lower().endswith((".jpg", ".jpeg"))
     ]
-    print(JPEGParser(image_path).get_complete_image_data())
+    # print(JPEGParser(image_path).get_complete_image_data())
+    print(JPEGParser(document_image).get_complete_image_data())
