@@ -27,11 +27,21 @@ MARKER_SEGMENTS_JPEG_NAME = {
     "DQT": b"\xff\xdb",  # (Define Quantization Table)
     "DHT": b"\xff\xc4",  # (Define Huffman Table)
     "DRI": b"\xff\xdd",  # (Restart Interval)
+    # Restart Markers
+    "RST0": b"\xff\xd0",
+    "RST1": b"\xff\xd1",
+    "RST2": b"\xff\xd2",
+    "RST3": b"\xff\xd3",
+    "RST4": b"\xff\xd4",
+    "RST5": b"\xff\xd5",
+    "RST6": b"\xff\xd6",
+    "RST7": b"\xff\xd7",
     # Start of Frame Markers
     "SOF0": b"\xff\xc0",  # (Start of Frame | Baseline DCT)
     "SOF1": b"\xff\xc1",  # (Start of Frame | Extended Sequential DCT)
     "SOF2": b"\xff\xc2",  # (Start of Frame | Progressive DCT)
     "SOF3": b"\xff\xc3",  # (Start of Frame | Lossless JPEG)
+    # Scan Headwer
     "SOS": b"\xff\xda",  # (Scan Header)
 }
 
@@ -62,6 +72,15 @@ MARKER_SEGMENTS_JPEG_ADDRESS = {
     b"\xff\xdb": "DQT",  # (Define Quantization Table)
     b"\xff\xc4": "DHT",  # (Define Huffman Table)
     b"\xff\xdd": "DRI",  # (Restart Interval)
+    # Restart Markers
+    b"\xff\xd0": "RST0",
+    b"\xff\xd1": "RST1",
+    b"\xff\xd2": "RST2",
+    b"\xff\xd3": "RST3",
+    b"\xff\xd4": "RST4",
+    b"\xff\xd5": "RST5",
+    b"\xff\xd6": "RST6",
+    b"\xff\xd7": "RST7",
     # Start of Frame Markers
     b"\xff\xc0": "SOF0",  # (Start of Frame | Baseline DCT)
     b"\xff\xc1": "SOF1",  # (Start of Frame | Extended Sequential DCT)

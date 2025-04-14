@@ -1,7 +1,6 @@
 import os
 import json
 from imagehat.parsers.jpeg_parser import JPEGParser
-from imagehat.tools.formats import VALID_FORMATS
 
 
 def convert_bytes(obj):
@@ -22,45 +21,29 @@ def convert_bytes(obj):
     return obj
 
 
-def extract_metadata_from_folder(folder_path: str, verbose: str = None) -> dict:
+def extract_metadata_from_folder(folder_path: str, verbose: str = "complete") -> dict:
     """
-    Extracts metadata from all JPEG images in a folder.
+    Extracts metadata from all JPEG images in a folder using JPEGParser.get_image_datas().
 
     :param folder_path: Path to the folder containing images.
     :type folder_path: str
     :param verbose: Verbosity mode. Options:
-                    - None (default): Returns full metadata.
-                    - "exif": Returns only EXIF metadata.
+                    - "complete" (default): Full metadata.
+                    - "exif": Only EXIF metadata.
     :type verbose: str, optional
 
     :return: Dictionary of image filenames mapped to metadata.
     :rtype: dict
     """
-    image_files = [
-        os.path.join(folder_path, f)
-        for f in os.listdir(folder_path)
-        if f.lower().endswith(tuple(VALID_FORMATS.keys()))
-    ]
-
-    if not image_files:
-        print(f"Skipping {folder_path}: No valid JPEG images found.")
-        return {}
-
-    metadata = {}
-    for img in image_files:
-        parser = JPEGParser(img)
-        if verbose == "exif":
-            data = parser.get_exif_data()
-        else:
-            data = parser.get_complete_image_data()
-        metadata[os.path.basename(img)] = data
-
-    return convert_bytes(metadata)
+    image_data_list = JPEGParser.get_image_datas(images=folder_path, verbose=verbose)
+    return {
+        entry["file_name"]: convert_bytes(entry["data"]) for entry in image_data_list
+    }
 
 
 def save_metadata_to_json(
     folder_path: str,
-    output_folder: str = "imagehat/datasets/json_datasets",
+    output_folder: str = False,
     verbose: str = None,
 ):
     """
@@ -78,6 +61,13 @@ def save_metadata_to_json(
     :return: None
     """
     try:
+        if output_folder:
+            output_folder = os.path.join("datasets/json_datasets", output_folder)
+        else:
+            output_folder = "datasets/json_datasets"
+
+        os.makedirs(output_folder, exist_ok=True)
+
         folder_name = os.path.basename(os.path.normpath(folder_path))
         os.makedirs(output_folder, exist_ok=True)
         output_path = os.path.join(output_folder, f"{folder_name}_metadata.json")
@@ -96,7 +86,9 @@ def save_metadata_to_json(
         print(f"Error processing folder '{folder_path}': {e}")
 
 
-def process_all_subfolders(base_folder: str, verbose: str = None):
+def process_all_subfolders(
+    base_folder: str, output_folder: str = None, verbose: str = None
+):
     """
     Iterates through all subfolders in a base directory and extracts metadata.
 
@@ -116,12 +108,20 @@ def process_all_subfolders(base_folder: str, verbose: str = None):
     for folder in os.listdir(base_folder):
         folder_path = os.path.join(base_folder, folder)
         if os.path.isdir(folder_path):
-            save_metadata_to_json(folder_path, verbose=verbose)
+            save_metadata_to_json(
+                folder_path=folder_path, output_folder=output_folder, verbose=verbose
+            )
 
     print("Processing complete.")
 
 
 if __name__ == "__main__":
     # Example usage when run directly (not imported)
-    base_folder = "datasets/archive/Dresden_Exp"
-    process_all_subfolders(base_folder)
+    # base_folder = os.path.join("datasets", "archive", "Dresden_Exp")
+    base_folder = os.path.join(
+        "datasets", "scraped_news_images", "downloaded_images"
+    )
+    # news_folder = os.path.join("datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende")
+
+    output_folder = os.path.join("datasets", "json_datasets", "newspaper_images")
+    process_all_subfolders(base_folder, output_folder, verbose="complete")

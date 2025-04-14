@@ -166,6 +166,16 @@ class JPEGParser:
                 continue
 
             marker = bytes([0xFF, marker_byte])
+
+            if 0xD0 <= marker_byte <= 0xD7:
+                marker_name = f"RST{marker_byte - 0xD0}"
+                markers[marker_name] = {
+                    "offset": pos,
+                    "size": None,  # RST markers are standalone and have no segment size
+                }
+                pos += 2
+                continue
+
             marker_name = MARKER_SEGMENTS_JPEG_ADDRESS.get(
                 marker, f"Unknown_{marker.hex().upper()}"
             )
@@ -178,7 +188,6 @@ class JPEGParser:
                 markers[marker_name] = {
                     "offset": pos,
                     "size": None,
-                    # "data": self.binary_repr[pos : pos + 2], # No need for this
                 }
                 pos += 2
                 continue
@@ -827,16 +836,22 @@ class JPEGParser:
         # Extract JPEG markers
         jpeg_marker_info = self._read_jpeg_markers()
 
-        if "APP1" not in jpeg_marker_info:
-            return {"error": "No APP1 segment found in the image."}
-
         # Extract APP1 segment and EXIF data
-        app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
-        self.app1_data = app1_data
+        exif_data = {"[ERROR]": "No EXIF IFD data found."}
+        gps_data = {"[ERROR]": "No GPS IFD data found."}
+        interop_data = {"[ERROR]": "No Interop IFD data found."}
 
-        exif_data = app1_data.get("EXIF IFD Data", {"error": "No EXIF IFD data found."})
-        gps_data = app1_data.get("GPS IFD Data", {"error": "No GPS IFD data found."})
-        interop_data = app1_data.get("Interop IFD Data", {"error": "No Interop IFD data found."})
+        # Only try to parse APP1 if it's present
+        if "APP1" in jpeg_marker_info:
+            app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
+            self.app1_data = app1_data
+
+            exif_data = app1_data.get("EXIF IFD Data", exif_data)
+            gps_data = app1_data.get("GPS IFD Data", gps_data)
+            interop_data = app1_data.get("Interop IFD Data", interop_data)
+        else:
+            # print(f"[WARN] No APP1 segment found in {self.img_path}")
+            pass
 
         return {
             "file_name": self.img_path,
@@ -860,12 +875,18 @@ class JPEGParser:
         # Extract JPEG markers
         jpeg_marker_info = self._read_jpeg_markers()
 
-        if "APP1" not in jpeg_marker_info:
-            return {"error": "No APP1 segment found in the image."}
+        # Prepare default APP1 response
+        app1_data = {"[ERROR]": "APP1 segment not found."}
 
-        # Extract APP1 segment and EXIF data
-        app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
-        self.app1_data = app1_data
+        if "APP1" in jpeg_marker_info:
+            try:
+                app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
+                self.app1_data = app1_data
+            except Exception as e:
+                app1_data = {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
+                print(f"[WARN] APP1 parsing issue in {self.img_path}: {e}")
+        else:
+            print(f"[WARN] No APP1 segment found in {self.img_path}")
 
         # Construct full report
         _, file_ext = os.path.splitext(self.img_path)
@@ -919,11 +940,19 @@ class JPEGParser:
                 raise ValueError("Invalid folder path.")
 
             # Get all JPEG images from a folder
+            all_files = os.listdir(images)
             image_files = [
                 os.path.join(images, f)
-                for f in os.listdir(images)
-                if f.lower().endswith((".jpg", ".jpeg"))
+                for f in all_files
+                if os.path.splitext(f)[1].lower() in JPEG_EXTENSIONS
             ]
+
+            skipped = len(all_files) - len(image_files)
+            if skipped:
+                print(f"[INFO] Skipped {skipped} non-JPEG files in '{images}'")
+
+            if not image_files:
+                return []
 
             if not image_files:
                 raise ValueError("No valid images found in the folder.")
@@ -970,12 +999,24 @@ class JPEGParser:
 
         # Generate reports
         if verbose == "complete":
-            return [cls(img).get_complete_image_data() for img in image_objects]
+            return [
+                {
+                    "file_name": os.path.basename(img.img_path),
+                    "data": img.get_complete_image_data(),
+                }
+                for img in image_objects
+            ]
         elif verbose == "exif":
-            return [cls(img).get_exif_image_data() for img in image_objects]
+            return [
+                {
+                    "file_name": os.path.basename(img.img_path),
+                    "data": img.get_exif_image_data(),
+                }
+                for img in image_objects
+            ]
         else:
             raise ValueError(
-                "Valid verbose option not used. Please choose 'complete' or 'exif'."
+                f"Invalid verbose option: '{verbose}'. Choose 'complete' or 'exif'."
             )
 
 
@@ -990,17 +1031,22 @@ if __name__ == "__main__":
 
     # # NOTE: Testing on all camera models in Dresden Dataset
     testset_folder = os.path.join("tests", "testsets", "testset-small")
+    # news_folder = os.path.join("datasets", "Downloaded_Images-20250405T145639Z-001", "Downloaded_Images")
+    news_folder = os.path.join("datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende")
+    image_path = os.path.join(
+    "datasets",
+    "scraped_news_images",
+    "downloaded_images",   # ✅ Watch out for typos!
+    "Aftenposten",
+    "000f8538-a096-4975-b2df-9d352d8d8379.jpg"
+)
+    # list_of_images = [
+    #     os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
+    # ]
 
-    list_of_images = [
-        os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
+    list_of_images_news = [
+        os.path.join(news_folder, fp)
+        for fp in os.listdir(news_folder)
+        if fp.lower().endswith((".jpg", ".jpeg"))
     ]
-
-    images = [JPEGParser(img) for img in list_of_images]
-
-    # meta = images[1].get_complete_image_data()
-    meta = images[1].get_exif_image_data()
-
-    # for k, v in meta["APP1 Info"].items():
-    for k, v in meta.items():
-        print(k, v)
-        print("\n\n")
+    print(JPEGParser(image_path).get_complete_image_data())
