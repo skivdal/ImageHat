@@ -746,7 +746,7 @@ class JPEGParser:
 
         dt = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
         doc_type = self._get_tag_type(tag=tag, endianness=endianness)
-        doc_count = self._get_count(tag=tag, endianness=endianness)
+        doc_count = self._get_tag_count(tag=tag, endianness=endianness)
 
         if dt in OVERFLOW_TYPES or count > 4:
             content_bytes = self._APP1_SEGMENT[
@@ -894,7 +894,7 @@ class JPEGParser:
             tag_info = ALL_TAGS.get(tag_name)
             return tag_info["type"]
 
-    def _get_tag_type(self, tag: bytes, endianness: str) -> str:
+    def _get_tag_count(self, tag: bytes, endianness: str) -> str:
         """
         Given a tag ID (in bytes) and endianness ('MM' = Big-Endian, 'II' = Little-Endian),
         returns the corresponding EXIF count from the TAG_TYPES dictionary.
@@ -958,28 +958,52 @@ class JPEGParser:
         """
 
         # Extract JPEG markers
+
         jpeg_marker_info = self._read_jpeg_markers()
+        app1_info = {"[ERROR]": "No APP1 segment found."}
+        iptc_info = {"[INFO]": "No IPTC data found."}
 
-        # Extract APP1 segment and EXIF data
-        exif_data = {"[ERROR]": "No EXIF IFD data found."}
-        gps_data = {"[ERROR]": "No GPS IFD data found."}
-        interop_data = {"[ERROR]": "No Interop IFD data found."}
+        # General File Info
+        _, file_ext = os.path.splitext(self.img_path)
+        file_size = len(self.binary_repr)
 
-        # Only try to parse APP1 if it's present
-        if "APP1" in jpeg_marker_info:
-            app1_data = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
-            self.app1_data = app1_data
-
-            exif_data = app1_data.get("EXIF IFD Data", exif_data)
-            gps_data = app1_data.get("GPS IFD Data", gps_data)
-            interop_data = app1_data.get("Interop IFD Data", interop_data)
-        else:
-            return {"[ERROR]": "Failed to parse APP1 segment."}
-
-        return {
+        general_info = {
             "file_name": self.img_path,
-            "exif_data": {**exif_data, **gps_data, **interop_data},
-        }  # Return only EXIF data
+            "file_format": file_ext,
+            "file_size_bytes": f"{file_size} bytes",
+            "file_size_kbytes": f"{round(file_size / 1024, 2)} kbs",
+        }
+
+        # Parse APP1 (EXIF) if present
+        if "APP1" in jpeg_marker_info:
+            try:
+                app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
+            except Exception as e:
+                app1_info = {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
+
+        # Parse APP13 (IPTC) if present
+        if "APP13" in jpeg_marker_info:
+            try:
+                app13_offset = jpeg_marker_info["APP13"]["offset"]
+                app13_size = jpeg_marker_info["APP13"]["size"]
+                app13_bytes = self.binary_repr[
+                    app13_offset + 4 : app13_offset + 2 + app13_size
+                ]
+
+                self._APP13_SEGMENT = self.binary_repr[
+                    app13_offset : app13_offset + app13_size
+                ]
+                iptc_info = self._read_iptc_data(app13_bytes)
+            except Exception as e:
+                iptc_info = {"[ERROR]": f"Failed to parse APP13 segment: {e}"}
+
+        # Final report
+        return {
+            "General File Info": general_info,
+            "JPEG Marker Segments": jpeg_marker_info,
+            "APP1 Info": app1_info,
+            "APP13 Info": iptc_info,
+        }
 
     def get_complete_image_data(self) -> dict:
         """
@@ -994,35 +1018,36 @@ class JPEGParser:
             - **APP1 Info** (*dict*): Parsed metadata from the APP1 segment.
         :rtype: dict
         """
-
         # Extract JPEG markers
         jpeg_marker_info = self._read_jpeg_markers()
 
         # Prepare default APP1 response
-        app1_data = {"[ERROR]": "APP1 segment not found."}
-        iptc_data = {"[ERROR]": "No APP13 segment found."}
+        # Extract APP1 segment and EXIF data
+        if "APP1" not in jpeg_marker_info:
+            app1_info = {"error": "No APP1 segment found in the image."}
+        elif "APP1" in jpeg_marker_info:
+            app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
 
         # Parse APP13 if present
         if "APP13" in jpeg_marker_info:
-            try:
-                app13_offset = jpeg_marker_info["APP13"]["offset"]
-                app13_size = jpeg_marker_info["APP13"]["size"]
-                app13_bytes = self.binary_repr[
-                    app13_offset + 4 : app13_offset + 2 + app13_size
-                ]
-                iptc_data = self._read_iptc_data(app13_bytes)
+            app13_offset = jpeg_marker_info["APP13"]["offset"]
+            app13_size = jpeg_marker_info["APP13"]["size"]
+            app13_bytes = self.binary_repr[
+                app13_offset + 4 : app13_offset + 2 + app13_size
+            ]
+            iptc_data = self._read_iptc_data(app13_bytes)
 
-                self._APP13_SEGMENT = self.binary_repr[
-                    app13_offset : app13_offset + app13_size
-                ]
-            except Exception as e:
-                iptc_data = {"[ERROR]": f"Failed to parse APP13 segment: {e}"}
+            self._APP13_SEGMENT = self.binary_repr[
+                app13_offset : app13_offset + app13_size
+            ]
+        else:
+            iptc_data = False
 
         # Construct full report
         _, file_ext = os.path.splitext(self.img_path)
         file_size = len(self.binary_repr)
 
-        if not iptc_data:
+        if iptc_data is False:
             return {
                 "General File Info": {
                     "file_name": self.img_path,
@@ -1031,20 +1056,19 @@ class JPEGParser:
                     "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
                 },
                 "JPEG Marker Segments": jpeg_marker_info,
-                "APP1 Info": app1_data,
+                "APP1 Info": app1_info,
             }
-        else:
-            return {
-                "General File Info": {
-                    "file_name": self.img_path,
-                    "file_format": file_ext,
-                    "file_size_bytes": f"{file_size} bytes",
-                    "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
-                },
-                "JPEG Marker Segments": jpeg_marker_info,
-                "APP1 Info": app1_data,
-                "IPTC Info": iptc_data,
-            }
+        return {
+            "General File Info": {
+                "file_name": self.img_path,
+                "file_format": file_ext,
+                "file_size_bytes": f"{file_size} bytes",
+                "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
+            },
+            "JPEG Marker Segments": jpeg_marker_info,
+            "APP1 Info": app1_info,
+            "IPTC Info": iptc_data,
+        }
 
     @classmethod
     def get_image_datas(
@@ -1193,14 +1217,15 @@ if __name__ == "__main__":
         "2560px-protest-against-dakota-access-and-keystone-xl-pipelines-20170126-1641-1140x756.jpg",
     )
 
-    # list_of_images = [
-    #     os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
+    list_of_images = [
+        os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
+    ]
+    images = [JPEGParser(img) for img in list_of_images]
+
+    # list_of_images_news = [
+    #     os.path.join(news_folder, fp)
+    #     for fp in os.listdir(news_folder)
+    #     if fp.lower().endswith((".jpg", ".jpeg"))
     # ]
 
-    list_of_images_news = [
-        os.path.join(news_folder, fp)
-        for fp in os.listdir(news_folder)
-        if fp.lower().endswith((".jpg", ".jpeg"))
-    ]
-    # print(JPEGParser(image_path).get_complete_image_data())
-    print(JPEGParser(document_image).get_complete_image_data())
+    print(images[0].get_complete_image_data())
