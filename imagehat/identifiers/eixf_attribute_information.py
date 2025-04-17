@@ -78,6 +78,61 @@ TAG_TYPES = {
 # in the binary image file.
 OVERFLOW_TYPES = ["RATIONAL", "SIGNED_RATIONAL", "DOUBLE"]
 
+# These are TIFF specific tags that are not a part of the EXIF standard, but found in the 0th IFD header
+TIFF_TAGS = {
+    # A. Tags relating to image data structure
+    "ImageWidth": {"tag": b"\x01\x00", "type": "SHORT or LONG", "count": 1},
+    "ImageLength": {"tag": b"\x01\x01", "type": "SHORT or LONG", "count": 1},
+    "BitsPerSample": {"tag": b"\x01\x02", "type": "SHORT", "count": 3},
+    "Compression": {"tag": b"\x01\x03", "type": "SHORT", "count": 1},
+    "PhotometricInterpretation": {"tag": b"\x01\x06", "type": "SHORT", "count": 1},
+    "ImageDescription": {"tag": b"\x01\x0e", "type": "ASCII or UTF-8", "count": "Any"},
+    "Make": {"tag": b"\x01\x0f", "type": "ASCII or UTF-8", "count": "Any"},
+    "Model": {"tag": b"\x01\x10", "type": "ASCII or UTF-8", "count": "Any"},
+    # B. Tags relating to recording offset
+    "StripOffsets": {"tag": b"\x01\x11", "type": "SHORT or LONG", "count": "Any"},
+    "Orientation": {"tag": b"\x01\x12", "type": "SHORT", "count": 1},
+    "SamplesPerPixel": {"tag": b"\x01\x15", "type": "SHORT", "count": 1},
+    "RowsPerStrip": {"tag": b"\x01\x16", "type": "SHORT or LONG", "count": 1},
+    "StripByteCounts": {"tag": b"\x01\x17", "type": "SHORT or LONG", "count": "Any"},
+    "XResolution": {"tag": b"\x01\x1a", "type": "RATIONAL", "count": 1},
+    "YResolution": {"tag": b"\x01\x1b", "type": "RATIONAL", "count": 1},
+    "PlanarConfiguration": {"tag": b"\x01\x1c", "type": "SHORT", "count": 1},
+    "ResolutionUnit": {"tag": b"\x01\x28", "type": "SHORT", "count": 1},
+    # C. Tags relating to image data characteristics
+    "TransferFunction": {"tag": b"\x01\x2d", "type": "SHORT", "count": "768 (256×3)"},
+    "Software": {"tag": b"\x01\x31", "type": "ASCII or UTF-8", "count": "Any"},
+    "DateTime": {"tag": b"\x01\x32", "type": "ASCII", "count": 20},
+    "Artist": {"tag": b"\x01\x3b", "type": "ASCII or UTF-8", "count": "Any"},
+    "WhitePoint": {"tag": b"\x01\x3e", "type": "RATIONAL", "count": 2},
+    "PrimaryChromaticities": {"tag": b"\x01\x3f", "type": "RATIONAL", "count": 6},
+    # JPEG thumbnail support
+    "JPEGInterchangeFormat": {
+        "tag": b"\x02\x01",
+        "type": "LONG",
+        "count": 1,
+    },  # Offset to JPEG SOI
+    "JPEGInterchangeFormatLength": {
+        "tag": b"\x02\x02",
+        "type": "LONG",
+        "count": 1,
+    },  # Bytes of JPEG data
+    # YCbCr-related
+    "YCbCrCoefficients": {
+        "tag": b"\x02\x11",
+        "type": "RATIONAL",
+        "count": 3,
+    },  # Color space transformation matrix coefficients
+    "YCbCrSubSampling": {"tag": b"\x02\x12", "type": "SHORT", "count": 2},
+    "YCbCrPositioning": {"tag": b"\x02\x13", "type": "SHORT", "count": 1},
+    "ReferenceBlackWhite": {"tag": b"\x02\x14", "type": "RATIONAL", "count": 6},
+    # D. Other Tags
+    "Copyright": {"tag": b"\x82\x98", "type": "ASCII or UTF-8", "count": "Any"},
+    # Pointers
+    "ExifIFDPointer": {"tag": b"\x87\x69", "type": "LONG", "count": 1},
+    "GPSInfoIFDPointer": {"tag": b"\x88\x25", "type": "LONG", "count": 1},
+}
+
 # Tags directly related to EXIF
 EXIF_TAGS = {
     # A. Tags Relating to Version
@@ -213,6 +268,7 @@ EXIF_TAGS = {
     },
 }
 
+
 # EXIF tags related to GPS
 GPS_EXIF_TAGS = {
     "GPSVersionID": {"tag": b"\x00", "type": "BYTE", "count": 4},
@@ -249,6 +305,7 @@ GPS_EXIF_TAGS = {
     "GPSHPositioningError": {"tag": b"\x1f", "type": "RATIONAL", "count": 1},
 }
 
+
 # Tags related to interoperability. The tag(s) of this dictionary are set to
 # indicate which type of operability standard the image follows.
 # The Interop tag is supposed to be recorded inside
@@ -261,48 +318,6 @@ INTEROP_EXIF_TAGS = {
     "RelatedImageLength": {"tag": b"\x10\x02", "type": "SHORT or LONG", "count": 1},
 }
 
-# These are TIFF specific tags that are not a part of the EXIF standard, but found in the 0th IFD header
-TIFF_TAGS = {
-    # A. Tags relating to image data structure
-    "ImageWidth": {"tag": b"\x01\x00", "type": "SHORT or LONG", "count": 1},
-    "ImageLength": {"tag": b"\x01\x01", "type": "SHORT or LONG", "count": 1},
-    "BitsPerSample": {"tag": b"\x01\x02", "type": "SHORT", "count": 3},
-    "Compression": {"tag": b"\x01\x03", "type": "SHORT", "count": 1},
-    "PhotometricInterpretation": {"tag": b"\x01\x06", "type": "SHORT", "count": 1},
-    "ImageDescription": {"tag": b"\x01\x0e", "type": "ASCII or UTF-8", "count": "Any"},
-    "Make": {"tag": b"\x01\x0f", "type": "ASCII or UTF-8", "count": "Any"},
-    "Model": {"tag": b"\x01\x10", "type": "ASCII or UTF-8", "count": "Any"},
-    # B. Tags relating to recording offset
-    "StripOffsets": {"tag": b"\x01\x11", "type": "SHORT or LONG", "count": "Any"},
-    "Orientation": {"tag": b"\x01\x12", "type": "SHORT", "count": 1},
-    "SamplesPerPixel": {"tag": b"\x01\x15", "type": "SHORT", "count": 1},
-    "RowsPerStrip": {"tag": b"\x01\x16", "type": "SHORT or LONG", "count": 1},
-    "StripByteCounts": {"tag": b"\x01\x17", "type": "SHORT or LONG", "count": "Any"},
-    "XResolution": {"tag": b"\x01\x1a", "type": "RATIONAL", "count": 1},
-    "YResolution": {"tag": b"\x01\x1b", "type": "RATIONAL", "count": 1},
-    "PlanarConfiguration": {"tag": b"\x01\x1c", "type": "SHORT", "count": 1},
-    "ResolutionUnit": {"tag": b"\x01\x28", "type": "SHORT", "count": 1},
-    # C. Tags relating to image data characteristics
-    "TransferFunction": {"tag": b"\x01\x2d", "type": "SHORT", "count": "768 (256×3)"},
-    "Software": {"tag": b"\x01\x31", "type": "ASCII or UTF-8", "count": "Any"},
-    "DateTime": {"tag": b"\x01\x32", "type": "ASCII", "count": 20},
-    "Artist": {"tag": b"\x01\x3b", "type": "ASCII or UTF-8", "count": "Any"},
-    "WhitePoint": {"tag": b"\x01\x3e", "type": "RATIONAL", "count": 2},
-    "PrimaryChromaticities": {"tag": b"\x01\x3f", "type": "RATIONAL", "count": 6},
-    # JPEG thumbnail support
-    "JPEGInterchangeFormat": {"tag": b"\x02\x01", "type": "LONG", "count": 1},
-    "JPEGInterchangeFormatLength": {"tag": b"\x02\x02", "type": "LONG", "count": 1},
-    # YCbCr-related
-    "YCbCrCoefficients": {"tag": b"\x02\x11", "type": "RATIONAL", "count": 3},
-    "YCbCrSubSampling": {"tag": b"\x02\x12", "type": "SHORT", "count": 2},
-    "YCbCrPositioning": {"tag": b"\x02\x13", "type": "SHORT", "count": 1},
-    "ReferenceBlackWhite": {"tag": b"\x02\x14", "type": "RATIONAL", "count": 6},
-    # D. Other Tags
-    "Copyright": {"tag": b"\x82\x98", "type": "ASCII or UTF-8", "count": "Any"},
-    # Pointers
-    "ExifIFDPointer": {"tag": b"\x87\x69", "type": "LONG", "count": 1},
-    "GPSInfoIFDPointer": {"tag": b"\x88\x25", "type": "LONG", "count": 1},
-}
 
 TIFF_TAG_DICT_REV = {v["tag"]: k for k, v in TIFF_TAGS.items()}
 

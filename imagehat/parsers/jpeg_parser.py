@@ -23,7 +23,6 @@ from imagehat.identifiers.eixf_attribute_information import (
 )
 from imagehat.identifiers.iptc_attribute_information import (
     IPTC_TAGS,
-    IPTC_TAGS_DICT_REV,
 )
 
 
@@ -49,20 +48,24 @@ class JPEGParser:
     """
 
     def __init__(self, img_path: str):
+        # Functionality specific attributes
         self.img_path: str = img_path
         self._validate_file_path()
-        self.binary_repr: bytes = (
-            self.get_binary_data()
-        )  # creates hexadecimal representaion
+        self.binary_repr: bytes = self.get_binary_data()
+        # Data specific attributes
         self._APP1_SEGMENT = bytes | None
         self._APP13_SEGMENT = bytes | None
         self.file_data: dict | None = None
         self.app1_data: dict | None = None
+        self.first_ifd_data: dict | None = None
         self.exif_ifd_data: dict | None = None
         self.gps_ifd_data: dict | None = None
         self.interop_ifd_data: dict | None = None
-        self.first_ifd_data: dict | None = None
         self.thumbnail_ifd_data: dict | None = None
+        # Attributes related to conformity/
+        # self.ecs: int | None = None
+        # self.tovs: int | None = None
+        # self.adjusted_ecs: int | None = None
 
     def get_binary_data(self) -> bytes:
         """
@@ -270,6 +273,10 @@ class JPEGParser:
             byte_order_bytes = self._APP1_SEGMENT[
                 byte_order_offset : byte_order_offset + 2
             ]
+            # New logic: if missing, assume 'MM'
+            if byte_order_bytes not in [b"II", b"MM"]:
+                byte_order_bytes = b"MM"  # Default assumption
+                byte_order_offset = -1  # Optional: indicate it was assumed
 
             # Setting endianness for the rest of runtime
             endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
@@ -290,6 +297,13 @@ class JPEGParser:
             ### Always unpack constants in big endian from project files.
             comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
             report["TIFF Validity"] = magic_number == comp_magic_number
+
+            report["EXIF Validity"] = (
+                report["TIFF Validity"]
+                and report.get("EXIF Identifier Offset", -1) != -1
+                and "0th IFD Offset" in report
+                and "Entries in 0th IFD" in report
+            )
 
             # Recording offset to first IDF (should be 4 bytes)
             ifd_temp = self._convert_internal_identifier(
@@ -509,20 +523,17 @@ class JPEGParser:
         next_ifd_pointer_bytes = self._APP1_SEGMENT[
             next_ifd_pointer_offset : next_ifd_pointer_offset + 4
         ]
-        next_ifd_offset = (
-            tiff_header_offset
-            + struct.unpack(f"{endianness}I", next_ifd_pointer_bytes)[0]
-        )
+
+        next_ifd_offset_relative = struct.unpack(
+            f"{endianness}I", next_ifd_pointer_bytes
+        )[0]
+        next_ifd_offset_absolute = tiff_header_offset + next_ifd_offset_relative
+
         num_next_ifd_entries = struct.unpack(
             f"{endianness}H",
-            self._APP1_SEGMENT[
-                tiff_header_offset
-                + next_ifd_offset : tiff_header_offset
-                + next_ifd_offset
-                + 2
-            ],
+            self._APP1_SEGMENT[next_ifd_offset_absolute : next_ifd_offset_absolute + 2],
         )[0]
-        first_ifd_info["Offset to 1st IFD"] = next_ifd_offset
+        first_ifd_info["Offset to 1st IFD"] = next_ifd_offset_absolute
         first_ifd_info["Number of 1st IFD Entries"] = num_next_ifd_entries
 
         return (
@@ -744,16 +755,16 @@ class JPEGParser:
         :rtype: dict
         """
 
-        dt = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
+        type = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
         doc_type = self._get_tag_type(tag=tag, endianness=endianness)
         doc_count = self._get_tag_count(tag=tag, endianness=endianness)
 
-        if dt in OVERFLOW_TYPES or count > 4:
+        if type in OVERFLOW_TYPES or count > 4:
             content_bytes = self._APP1_SEGMENT[
                 value + tiff_offset : value + count + tiff_offset
             ]
             content_offset = value
-            if dt in OVERFLOW_TYPES:
+            if type in OVERFLOW_TYPES:
                 content_bytes = self._APP1_SEGMENT[
                     value + tiff_offset : value + tiff_offset + 8
                 ]
@@ -764,7 +775,7 @@ class JPEGParser:
                 "Absolute Offset": entry_offset,
                 "TIFF Offset": entry_offset - tiff_offset,
                 "Recorded Type": data_type,
-                "Type": dt,
+                "Type": type,
                 "Doc Type": doc_type,
                 "Count": count,
                 "Doc Count": doc_count,
@@ -780,7 +791,7 @@ class JPEGParser:
             "Absolute Offset": entry_offset,
             "TIFF Offset": entry_offset - tiff_offset,
             "Recorded Type": data_type,
-            "Type": dt,
+            "Type": type,
             "Doc Type": doc_type,
             "Count": count,
             "Doc Count": doc_count,
@@ -1216,6 +1227,15 @@ if __name__ == "__main__":
         "Document",
         "2560px-protest-against-dakota-access-and-keystone-xl-pipelines-20170126-1641-1140x756.jpg",
     )
+    document_image_alt = os.path.join(
+        "datasets",
+        "scraped_news_images",
+        "downloaded_images",
+        "Document",
+        "trine-folmoe-selvportrett-20250315-133351-scaled-e1742816457408-554x430.jpg",
+    )
+    gpt_img = r"C:\Users\saete\Downloads\ChatGPT Image 16. apr. 2025, 03_09_46.png"
+    gpt_jpg = r"C:\Users\saete\Downloads\DSC_style_landscape.jpg"
 
     list_of_images = [
         os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
@@ -1228,4 +1248,7 @@ if __name__ == "__main__":
     #     if fp.lower().endswith((".jpg", ".jpeg"))
     # ]
 
-    print(images[0].get_complete_image_data())
+    # print(JPEGParser(document_image_alt).get_complete_image_data())
+    # print(images[0].get_complete_image_data())
+    print(images[0].binary_repr[:25])
+    # print(JPEGParser(gpt_jpg).get_complete_image_data())
