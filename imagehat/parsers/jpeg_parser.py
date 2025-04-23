@@ -20,9 +20,20 @@ from imagehat.identifiers.eixf_attribute_information import (
     TIFF_TAG_DICT_REV,
     ALL_TAGS,
     ALL_TAGS_REV,
+    ALL_EXIF_TAGS,
+    EXIF_TAGS,
 )
+from imagehat.identifiers.support_levels import ALL_SUPPORT_LEVELS
 from imagehat.identifiers.iptc_attribute_information import (
     IPTC_TAGS,
+)
+
+from imagehat.utils.metrics import (
+    calculate_ECS,
+    calculate_tag_validity_score,
+    calculate_s_TOS,
+    calculate_w_TOS,
+    calculate_header_validity,
 )
 
 
@@ -53,8 +64,9 @@ class JPEGParser:
         self._validate_file_path()
         self.binary_repr: bytes = self.get_binary_data()
         # Data specific attributes
-        self._APP1_SEGMENT = bytes | None
-        self._APP13_SEGMENT = bytes | None
+        self.marker_info: dict | None = None
+        self._APP1_SEGMENT: dict | None = None
+        self._APP13_SEGMENT: dict | None = None
         self.file_data: dict | None = None
         self.app1_data: dict | None = None
         self.first_ifd_data: dict | None = None
@@ -62,10 +74,13 @@ class JPEGParser:
         self.gps_ifd_data: dict | None = None
         self.interop_ifd_data: dict | None = None
         self.thumbnail_ifd_data: dict | None = None
-        # Attributes related to conformity/
-        # self.ecs: int | None = None
-        # self.tovs: int | None = None
-        # self.adjusted_ecs: int | None = None
+
+        # Metrics
+        self.header_validity_score: float | None = None
+        self.tag_validity_score: float | None = None
+        self.weak_tag_order_score: float | None = None
+        self.weak_tag_order_score: float | None = None
+        self.ecs: float | None = None  # Final score
 
     def get_binary_data(self) -> bytes:
         """
@@ -243,6 +258,8 @@ class JPEGParser:
             app1_size = int.from_bytes(
                 self.binary_repr[app1_offset + 2 : app1_offset + 4], byteorder="big"
             )
+            if app1_offset + app1_size > len(self.binary_repr):
+                raise ValueError("APP1 segment size exceeds image binary length.")
 
             report["APP1 Size"] = (
                 app1_size  # For latter, add failsafe if segment > 64 kb
@@ -262,25 +279,31 @@ class JPEGParser:
             # Recording EXIF identifier (s.b. 4 bytes, 6 bytes including padding)
             exif_identifier = self._APP1_SEGMENT.find(IDENTIFIERS["exif_identifier"])
             report["EXIF Identifier Offset"] = (
-                exif_identifier if exif_identifier else None
+                exif_identifier if exif_identifier != -1 else None
             )
 
             # Recording byte order (should be 2 bytes)
             # Recodring endianness starts here. EXIF is big-endian until byte-order is discovered.
-            byte_order_offset, endianness_report = self._find_target_byte(
+            byte_order_offset, detected_byte_order = self._find_target_byte(
                 self._APP1_SEGMENT[:25], targets=[IDENTIFIERS["II"], IDENTIFIERS["MM"]]
             )
-            byte_order_bytes = self._APP1_SEGMENT[
-                byte_order_offset : byte_order_offset + 2
-            ]
-            # New logic: if missing, assume 'MM'
-            if byte_order_bytes not in [b"II", b"MM"]:
+
+            # if missing, assume 'MM'
+            if detected_byte_order is None:
                 byte_order_bytes = b"MM"  # Default assumption
                 byte_order_offset = -1  # Optional: indicate it was assumed
-
-            # Setting endianness for the rest of runtime
-            endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
-            report["Byte Order"] = repr(endianness_report)
+                endianness = ">"
+                report["Byte Order"] = byte_order_bytes
+                report["Byte Order Offset"] = byte_order_offset
+                print("[WARN]: Byte Order not detected in this media file.")
+            elif detected_byte_order:
+                byte_order_bytes = self._APP1_SEGMENT[
+                    byte_order_offset : byte_order_offset + 2
+                ]
+                # Setting endianness for the rest of runtime
+                endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
+                report["Byte Order"] = repr(detected_byte_order)
+                report["Byte Order Offset"] = byte_order_offset
 
             # Recording magic number (should be 2 bytes)
             magic_number = self._convert_internal_identifier(
@@ -291,19 +314,13 @@ class JPEGParser:
                 magic_number_offset : magic_number_offset + 2
             ]
             magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
-            report["TIFF Magic Number Offset"] = magic_number_offset
+            report["TIFF Magic Number Offset"] = (
+                magic_number_offset if magic_number_offset != -1 else None
+            )
 
             ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
             ### Always unpack constants in big endian from project files.
             comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
-            report["TIFF Validity"] = magic_number == comp_magic_number
-
-            report["EXIF Validity"] = (
-                report["TIFF Validity"]
-                and report.get("EXIF Identifier Offset", -1) != -1
-                and "0th IFD Offset" in report
-                and "Entries in 0th IFD" in report
-            )
 
             # Recording offset to first IDF (should be 4 bytes)
             ifd_temp = self._convert_internal_identifier(
@@ -403,7 +420,7 @@ class JPEGParser:
             index = data.find(target)
             if index != -1:
                 return index, target
-        return None
+        return None, None
 
     def _convert_internal_identifier(
         self, endianness: str, datatype: str, id: str
@@ -556,11 +573,9 @@ class JPEGParser:
                 2, byteorder="big"
             )  # Convert integer tag to byte format
 
-            if tag_bytes in TIFF_TAG_DICT_REV:
-                tag_name = TIFF_TAG_DICT_REV[tag_bytes]
-
-            if tag_bytes not in TIFF_TAG_DICT_REV:
-                tag_name = f"Unknown_{repr(tag_bytes)}"
+            tag_name = TIFF_TAG_DICT_REV.get(tag_bytes, f"Unknown_{repr(tag_bytes)}")
+            # if tag_name.startswith("Unknown"):
+            #     pass
 
             thumbnail_ifd_tags[tag_name] = self._parse_tag(
                 tag=tag,
@@ -648,12 +663,9 @@ class JPEGParser:
             )  # Convert integer tag to byte format
 
             # Parses EXIF tags
-            if tag_bytes in GPS_TAG_DICT_REV:
-                tag_name = GPS_TAG_DICT_REV[tag_bytes]
-
-            # Parses unknown tags to adhere future improvements
-            if tag_bytes not in GPS_TAG_DICT_REV:
-                tag_name = f"Unknown_{repr(tag_bytes)}"
+            tag_name = GPS_TAG_DICT_REV.get(tag_bytes, f"Unknown_{repr(tag_bytes)}")
+            # if tag_name.startswith("Unknown"):
+            #     pass
 
             gps_data[tag_name] = self._parse_tag(
                 tag=tag,
@@ -688,12 +700,9 @@ class JPEGParser:
             )  # Convert integer tag to byte format
 
             # Parses EXIF tags
-            if tag_bytes in INTEROP_TAG_DICT_REV:
-                tag_name = INTEROP_TAG_DICT_REV[tag_bytes]
-
-            # Parses unknown tags to adhere future improvements
-            if tag_bytes not in INTEROP_TAG_DICT_REV:
-                tag_name = f"Unknown_{repr(tag_bytes)}"
+            tag_name = INTEROP_TAG_DICT_REV.get(tag_bytes, f"Unknown_{repr(tag_bytes)}")
+            # if tag_name.startswith("Unknown"):
+            #     pass
 
             interop_data[tag_name] = self._parse_tag(
                 tag=tag,
@@ -755,52 +764,61 @@ class JPEGParser:
         :rtype: dict
         """
 
-        type = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
+        type_name = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
         doc_type = self._get_tag_type(tag=tag, endianness=endianness)
         doc_count = self._get_tag_count(tag=tag, endianness=endianness)
 
-        if type in OVERFLOW_TYPES or count > 4:
+        size_of_type = TAG_TYPES.get(type, 1)
+        total_data_length = count * size_of_type
+        absolute_offset = value + tiff_offset + self.marker_info["APP1"]["offset"]
+
+        is_overflow = total_data_length > 4 or type_name in OVERFLOW_TYPES
+        is_big = value > 1024
+
+        if is_overflow:
             content_bytes = self._APP1_SEGMENT[
                 value + tiff_offset : value + count + tiff_offset
             ]
             content_offset = value
-            if type in OVERFLOW_TYPES:
+            if type_name in OVERFLOW_TYPES:
                 content_bytes = self._APP1_SEGMENT[
                     value + tiff_offset : value + tiff_offset + 8
                 ]
-                value, decimal_value = self._parse_rational(content_bytes, endianness)
+                value = self._parse_rational(content_bytes, endianness)
+            if is_big:
+                content_bytes = f"Deferred @ {absolute_offset} (abs offset)"
 
             return {
                 "Markup": f"[{entry_offset}:{entry_offset+12}]",
                 "Absolute Offset": entry_offset,
                 "TIFF Offset": entry_offset - tiff_offset,
                 "Recorded Type": data_type,
-                "Type": type,
-                "Doc Type": doc_type,
+                "Type": type_name,
+                "Expected Type": doc_type,
                 "Count": count,
-                "Doc Count": doc_count,
-                "Content Location": content_offset,
-                "Content Bytes": repr(content_bytes),
+                "Expected Count": doc_count,
+                "Value Field Points To": absolute_offset,
+                "Content Bytes": repr(content_offset),
                 "Content Value": value,
-                "Tag Order": order,
-                # "Status": None,  # Advanced setting, in development
+                "IFD Tag Order": order,
             }
+
+        inline_bytes = value.to_bytes(
+            4, byteorder="little" if endianness == "<" else "big"
+        )
 
         return {
             "Markup": f"[{entry_offset}:{entry_offset+12}]",
             "Absolute Offset": entry_offset,
             "TIFF Offset": entry_offset - tiff_offset,
             "Recorded Type": data_type,
-            "Type": type,
-            "Doc Type": doc_type,
+            "Type": type_name,
+            "Expected Type": doc_type,
             "Count": count,
-            "Doc Count": doc_count,
-            "Content Bytes": repr(
-                value.to_bytes(4, byteorder="little" if endianness == "<" else "big")
-            ),
+            "Expected Count": doc_count,
+            "Content Bytes": inline_bytes,
             "Content Value": value,
-            "Tag Order": order,
-            # "Status": None,  # Advanced setting, in development
+            "IFD Tag Order": order,
         }
 
     def _read_iptc_data(self, app13_bytes: bytes) -> dict:
@@ -951,10 +969,10 @@ class JPEGParser:
         fraction_str = (
             f"{num}/{denom}" if denom else f"{num}/1"
         )  # Avoid division by zero
-        decimal_value = num / denom if denom else num  # Compute decimal representation
-        return fraction_str, decimal_value  # Return both representations
+        # decimal_value = num / denom if denom else num  # Compute decimal representation
+        return fraction_str
 
-    def get_exif_image_data(self) -> dict:
+    def get_exif_image_data(self, metrics=False) -> dict:
         """
         Extracts and returns EXIF metadata from the image.
 
@@ -971,15 +989,16 @@ class JPEGParser:
         # Extract JPEG markers
 
         jpeg_marker_info = self._read_jpeg_markers()
+        self.marker_info = jpeg_marker_info
         app1_info = {"[ERROR]": "No APP1 segment found."}
-        iptc_info = {"[INFO]": "No IPTC data found."}
+        # iptc_info = {"[INFO]": "No IPTC data found."}
 
         # General File Info
         _, file_ext = os.path.splitext(self.img_path)
         file_size = len(self.binary_repr)
 
         general_info = {
-            "file_name": self.img_path,
+            "file_name": os.path.basename(self.img_path),
             "file_format": file_ext,
             "file_size_bytes": f"{file_size} bytes",
             "file_size_kbytes": f"{round(file_size / 1024, 2)} kbs",
@@ -989,34 +1008,22 @@ class JPEGParser:
         if "APP1" in jpeg_marker_info:
             try:
                 app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
+                self.app1_data = app1_info
             except Exception as e:
                 app1_info = {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
 
-        # Parse APP13 (IPTC) if present
-        if "APP13" in jpeg_marker_info:
-            try:
-                app13_offset = jpeg_marker_info["APP13"]["offset"]
-                app13_size = jpeg_marker_info["APP13"]["size"]
-                app13_bytes = self.binary_repr[
-                    app13_offset + 4 : app13_offset + 2 + app13_size
-                ]
-
-                self._APP13_SEGMENT = self.binary_repr[
-                    app13_offset : app13_offset + app13_size
-                ]
-                iptc_info = self._read_iptc_data(app13_bytes)
-            except Exception as e:
-                iptc_info = {"[ERROR]": f"Failed to parse APP13 segment: {e}"}
-
-        # Final report
-        return {
+        output = {
             "General File Info": general_info,
             "JPEG Marker Segments": jpeg_marker_info,
             "APP1 Info": app1_info,
-            "APP13 Info": iptc_info,
         }
 
-    def get_complete_image_data(self) -> dict:
+        if metrics:
+            output.update({"Metrics": self.compute_conformity_metrics()})
+
+        return output
+
+    def get_complete_image_data(self, metrics=False) -> dict:
         """
         Extracts and returns a complete metadata report for the image.
 
@@ -1031,6 +1038,7 @@ class JPEGParser:
         """
         # Extract JPEG markers
         jpeg_marker_info = self._read_jpeg_markers()
+        self.marker_info = jpeg_marker_info
 
         # Prepare default APP1 response
         # Extract APP1 segment and EXIF data
@@ -1038,6 +1046,7 @@ class JPEGParser:
             app1_info = {"error": "No APP1 segment found in the image."}
         elif "APP1" in jpeg_marker_info:
             app1_info = self._read_app1_segment(jpeg_marker_info["APP1"]["offset"])
+            self.app1_data = app1_info
 
         # Parse APP13 if present
         if "APP13" in jpeg_marker_info:
@@ -1051,6 +1060,7 @@ class JPEGParser:
             self._APP13_SEGMENT = self.binary_repr[
                 app13_offset : app13_offset + app13_size
             ]
+
         else:
             iptc_data = False
 
@@ -1058,28 +1068,24 @@ class JPEGParser:
         _, file_ext = os.path.splitext(self.img_path)
         file_size = len(self.binary_repr)
 
-        if iptc_data is False:
-            return {
-                "General File Info": {
-                    "file_name": self.img_path,
-                    "file_format": file_ext,
-                    "file_size_bytes": f"{file_size} bytes",
-                    "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
-                },
-                "JPEG Marker Segments": jpeg_marker_info,
-                "APP1 Info": app1_info,
-            }
-        return {
+        output = {
             "General File Info": {
-                "file_name": self.img_path,
+                "file_name": os.path.basename(self.img_path),
                 "file_format": file_ext,
                 "file_size_bytes": f"{file_size} bytes",
                 "file_size_kbytes": f"{round(file_size/1024, 2)} kbs",
             },
             "JPEG Marker Segments": jpeg_marker_info,
             "APP1 Info": app1_info,
-            "IPTC Info": iptc_data,
         }
+
+        if iptc_data:
+            output.update({"IPTC Info": iptc_data})
+        if metrics:
+            output.update({"Metrics": self.compute_conformity_metrics()})
+
+        self.file_data = output
+        return output
 
     @classmethod
     def get_image_datas(
@@ -1088,6 +1094,7 @@ class JPEGParser:
         verbose: str = "complete",
         limit: int = None,
         segment: tuple[int, int] = None,
+        metrics: bool = False,
     ) -> list[dict]:
         """
         Generates metadata reports for all images in a given folder.
@@ -1149,53 +1156,213 @@ class JPEGParser:
         if limit is not None:
             image_files = image_files[:limit]
 
-        return cls._verbosed_output(image_files, verbose=verbose)
+        return cls._verbosed_output(image_files, verbose=verbose, metrics=metrics)
 
     @classmethod
-    def _verbosed_output(cls, image_files: list, verbose: str) -> list[dict]:
+    def _verbosed_output(
+        cls, image_files: list, verbose: str, metrics: bool = False
+    ) -> list[dict]:
         """
-        Helper method for get_image_datas() class method. Used for line reusability.
+        Helper method for get_image_datas(). Always includes conformity metrics.
 
-        :param image_files: List of JPEGParser objects.
-        :type image_files: list
-
-        :param verbose: The correct verbose mode for choosing the correct method.
-        :type verbose: str
-
-        :return: List containing all the images and their recorded content.
-        :rtype: list[dict]
-
+        :param image_files: List of JPEGParser objects or image paths.
+        :param verbose: Either "complete" or "exif".
+        :param metrics: Ignored now, always True.
+        :return: List of dictionaries with filename, metadata, and conformity metrics.
         """
         if not image_files:
             return []
 
-        # If we are dealing with JPEGParser instances or image paths
         if isinstance(image_files[0], str):
             image_objects = [cls(img) for img in image_files]
         else:
             image_objects = image_files
 
-        # Generate reports
-        if verbose == "complete":
-            return [
-                {
-                    "file_name": os.path.basename(img.img_path),
-                    "data": img.get_complete_image_data(),
-                }
-                for img in image_objects
-            ]
-        elif verbose == "exif":
-            return [
-                {
-                    "file_name": os.path.basename(img.img_path),
-                    "data": img.get_exif_image_data(),
-                }
-                for img in image_objects
-            ]
+        output = []
+        for img in image_objects:
+            if verbose == "complete":
+                data = img.get_complete_image_data()
+            elif verbose == "exif":
+                data = img.get_exif_image_data()
+            else:
+                raise ValueError(f"Invalid verbose option: '{verbose}'")
+
+            entry = {
+                "file_name": os.path.basename(img.img_path),
+                "data": data,
+            }
+
+            try:
+                entry.update({"Metrics", img.compute_conformity_metrics()})
+            except Exception as e:
+                pass
+
+            output.append(entry)
+
+        return output
+
+    def _get_tag_id(self, tag_name: str) -> bytes | None:
+        if tag_name.lower() == "unknown":
+            return None
+        tag_info = ALL_EXIF_TAGS.get(tag_name)
+        return tag_info["tag"] if tag_info else None
+
+    def _get_support_level(self, tag_name: str, mode: str = "compressed") -> str:
+        """
+        Return the support level letter ('M', 'O', 'R', etc.) for the given tag and mode.
+        Defaults to 'compressed' mode. Returns 'U' if unknown.
+        """
+        tag_info = ALL_SUPPORT_LEVELS.get(tag_name)
+        if not tag_info or "support" not in tag_info:
+            return "U"
+
+        support_data = tag_info["support"]
+
+        # Handle compressed directly, or dig into uncompressed formats
+        if mode == "compressed":
+            return support_data.get("compressed", "U")
+        elif mode in {"chunky", "planar", "ycc"}:
+            return support_data.get("uncompressed", {}).get(mode, "U")
         else:
+            return "U"
+
+    def _sort_by_byte(self, tag_dict: dict) -> list[bytes]:
+        """
+        Sorts the byte keys of a reversed tag dictionary (e.g. EXIF_TAG_DICT_REV).
+        Returns the keys sorted by their integer value (ascending).
+        """
+        return sorted(tag_dict.keys(), key=lambda b: int.from_bytes(b, byteorder="big"))
+
+    def compute_conformity_metrics(self):
+        """
+        Computes conformity metrics (ECS, H, TVS, TOS) based on parsed EXIF data.
+        Stores the results as attributes on the JPEGParser object.
+        """
+        if not self.app1_data:
             raise ValueError(
-                f"Invalid verbose option: '{verbose}'. Choose 'complete' or 'exif'."
+                "APP1 metadata not found. Run `get_complete_image_data()` first."
             )
+
+        # Baseline lists for comparison scoring
+        baseline_exif = self._sort_by_byte(EXIF_TAG_DICT_REV)
+        baseline_gps = self._sort_by_byte(GPS_TAG_DICT_REV)
+        baseline_interop = self._sort_by_byte(INTEROP_TAG_DICT_REV)
+
+        # Header Validity Score
+        e = int(bool(self.app1_data.get("EXIF Identifier Offset", False)))
+        t = int(bool(self.app1_data.get("TIFF Magic Number Offset", False)))
+        b = int(bool(self.app1_data.get("Byte Order", None)))
+
+        header_score = calculate_header_validity(e, t, b)
+        self.header_validity_score = header_score
+
+        all_tag_dicts = []
+        observed_exif, observed_gps, observed_interop = [], [], []
+
+        # Iterate over IFDs
+        ifds = [
+            ("EXIF", self.exif_ifd_data, baseline_exif, observed_exif),
+            ("GPS", self.gps_ifd_data, baseline_gps, observed_gps),
+            ("Interop", self.interop_ifd_data, baseline_interop, observed_interop),
+        ]
+
+        for ifd_name, ifd_data, baseline, observed in ifds:
+            if ifd_data:
+                for tag_name, tag_data in ifd_data.items():
+                    tag_id = self._get_tag_id(tag_name)
+                    tag_info = {
+                        "name": tag_name,
+                        "tag_id": tag_id,
+                        "type_valid": tag_data.get("Type") == tag_data.get("Doc Type"),
+                        "count_valid": (
+                            tag_data.get("Doc Count") == "Any"
+                            or tag_data.get("Count") == tag_data.get("Doc Count")
+                        ),
+                        "present": True,
+                        "support_level": self._get_support_level(tag_name),
+                        "order": tag_data.get("Tag Order", 0),
+                    }
+                    if tag_id:
+                        observed.append(tag_id)
+                    all_tag_dicts.append(tag_info)
+
+        # Tag Validity Score
+        tag_validity_score = calculate_tag_validity_score(all_tag_dicts)
+
+        # Calculate TOS
+        weak_tos_scores = {}
+        strict_tos_scores = {}
+        weak_tag_order_scores = []
+        strict_tag_order_scores = []
+
+        if observed_exif:
+            exif_tag_dicts = [
+                tag for tag in all_tag_dicts if tag["tag_id"] in observed_exif
+            ]
+            weak_tos_scores["EXIF"] = round(
+                calculate_w_TOS(observed_exif, baseline_exif), 5
+            )
+            strict_tos_scores["EXIF"] = round(
+                calculate_s_TOS(exif_tag_dicts, baseline_exif), 5
+            )
+
+            strict_tag_order_scores.append(strict_tos_scores["EXIF"])
+            weak_tag_order_scores.append(weak_tos_scores["EXIF"])
+
+        if observed_gps:
+            gps_tag_dicts = [
+                tag for tag in all_tag_dicts if tag["tag_id"] in observed_gps
+            ]
+            weak_tos_scores["GPS"] = round(
+                calculate_w_TOS(observed_gps, baseline_gps), 5
+            )
+            strict_tos_scores["GPS"] = round(
+                calculate_s_TOS(gps_tag_dicts, baseline_gps), 5
+            )
+
+            strict_tag_order_scores.append(strict_tos_scores["EXIF"])
+            weak_tag_order_scores.append(weak_tos_scores["EXIF"])
+
+        if observed_interop:
+            interop_tag_dicts = [
+                tag for tag in all_tag_dicts if tag["tag_id"] in observed_interop
+            ]
+            weak_tos_scores["Interop"] = round(
+                calculate_w_TOS(observed_interop, baseline_interop), 5
+            )
+            strict_tos_scores["Interop"] = round(
+                calculate_s_TOS(interop_tag_dicts, baseline_interop), 5
+            )
+
+            strict_tag_order_scores.append(strict_tos_scores["EXIF"])
+            weak_tag_order_scores.append(weak_tos_scores["EXIF"])
+        # Final tag order score (average of available TOS)
+        weak_tag_order = (
+            round(sum(weak_tag_order_scores) / len(weak_tag_order_scores), 5)
+            if weak_tag_order_scores
+            else 0.0
+        )
+        strict_tag_order = (
+            round(sum(strict_tag_order_scores) / len(strict_tag_order_scores), 5)
+            if strict_tag_order_scores
+            else 0.0
+        )
+
+        # EXIF Conformity Score
+        ecs = round(calculate_ECS(header_score, tag_validity_score, weak_tag_order), 5)
+
+        self.header_validity_score = header_score
+        self.tag_validity_score = tag_validity_score
+        self.weak_tag_order_score = weak_tos_scores
+        self.strict_tag_order_score = strict_tag_order
+        self.ecs = ecs
+        return {
+            "Header VAL": round(header_score, 5),
+            "Tag VAL Score": round(tag_validity_score, 5),
+            "Weak Tag Order Score": weak_tos_scores,
+            "Strict Tag Order Score": strict_tos_scores,
+            "EXIF Conformity Score": ecs,
+        }
 
 
 if __name__ == "__main__":
@@ -1209,9 +1376,10 @@ if __name__ == "__main__":
 
     # # NOTE: Testing on all camera models in Dresden Dataset
     testset_folder = os.path.join("tests", "testsets", "testset-small")
-    # news_folder = os.path.join("datasets", "Downloaded_Images-20250405T145639Z-001", "Downloaded_Images")
+    # testset_folder = os.path.join("tests", "testsets", "testset-large")
+
     news_folder = os.path.join(
-        "datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende"
+        "datasets", "scraped_news_images", "downloaded_images", "Document"
     )
     image_path = os.path.join(
         "datasets",
@@ -1240,15 +1408,21 @@ if __name__ == "__main__":
     list_of_images = [
         os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
     ]
-    images = [JPEGParser(img) for img in list_of_images]
+    # images = [JPEGParser(img) for img in list_of_images]
 
-    # list_of_images_news = [
-    #     os.path.join(news_folder, fp)
-    #     for fp in os.listdir(news_folder)
-    #     if fp.lower().endswith((".jpg", ".jpeg"))
-    # ]
+    # # list_of_images_news = [
+    # #     os.path.join(news_folder, fp)
+    # #     for fp in os.listdir(news_folder)
+    # #     if fp.lower().endswith((".jpg", ".jpeg"))
+    # # ]
 
     # print(JPEGParser(document_image_alt).get_complete_image_data())
-    # print(images[0].get_complete_image_data())
-    print(images[0].binary_repr[:25])
-    # print(JPEGParser(gpt_jpg).get_complete_image_data())
+    # images_data = [img.get_complete_image_data() for img in images]
+
+    # img = JPEGParser(document_image_alt)
+    # img.get_complete_image_data()
+    # img.compute_conformity_metrics()
+    # print(img.app1_data.keys())
+
+    o = JPEGParser.get_image_datas(list_of_images, verbose="exif", metrics=True)
+    print(o[-3])

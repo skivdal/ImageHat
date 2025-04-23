@@ -268,7 +268,6 @@ EXIF_TAGS = {
     },
 }
 
-
 # EXIF tags related to GPS
 GPS_EXIF_TAGS = {
     "GPSVersionID": {"tag": b"\x00", "type": "BYTE", "count": 4},
@@ -321,7 +320,7 @@ INTEROP_EXIF_TAGS = {
 
 TIFF_TAG_DICT_REV = {v["tag"]: k for k, v in TIFF_TAGS.items()}
 
-EXIF_TAG_DICT_REV = {v["tag"]: k for k, v in {**EXIF_TAGS, **INTEROP_EXIF_TAGS}.items()}
+EXIF_TAG_DICT_REV = {v["tag"]: k for k, v in EXIF_TAGS.items()}
 
 INTEROP_TAG_DICT_REV = {v["tag"]: k for k, v in INTEROP_EXIF_TAGS.items()}
 
@@ -335,3 +334,5 @@ ALL_TAGS_REV = {
     **INTEROP_TAG_DICT_REV,
     **GPS_TAG_DICT_REV,
 }
+
+ALL_EXIF_TAGS = {**EXIF_TAGS, **GPS_EXIF_TAGS, **INTEROP_EXIF_TAGS}

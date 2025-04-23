@@ -21,7 +21,9 @@ def convert_bytes(obj):
     return obj
 
 
-def extract_metadata_from_folder(folder_path: str, verbose: str = "complete") -> dict:
+def extract_metadata_from_folder(
+    folder_path: str, verbose: str = "complete", metrics: bool = False
+) -> dict:
     """
     Extracts metadata from all JPEG images in a folder using JPEGParser.get_image_datas().
 
@@ -45,6 +47,7 @@ def save_metadata_to_json(
     folder_path: str,
     output_folder: str = False,
     verbose: str = None,
+    metrics: bool = False,
 ):
     """
     Extracts metadata from images in a folder and saves it as a JSON file.
@@ -87,7 +90,10 @@ def save_metadata_to_json(
 
 
 def process_all_subfolders(
-    base_folder: str, output_folder: str = None, verbose: str = None
+    base_folder: str,
+    output_folder: str = None,
+    verbose: str = None,
+    metrics: bool = False,
 ):
     """
     Iterates through all subfolders in a base directory and extracts metadata.
@@ -117,10 +123,10 @@ def process_all_subfolders(
 
 if __name__ == "__main__":
     # Example usage when run directly (not imported)
-    # base_folder = os.path.join("datasets", "archive", "Dresden_Exp")
-    base_folder = os.path.join(
-        "datasets", "scraped_news_images", "downloaded_images"
-    )
+    base_folder = os.path.join("datasets", "archive", "Dresden_Exp")
+    # base_folder = os.path.join(
+    #     "datasets", "scraped_news_images", "downloaded_images"
+    # )
     # news_folder = os.path.join("datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende")
 
     output_folder = os.path.join("datasets", "json_datasets", "newspaper_images")
