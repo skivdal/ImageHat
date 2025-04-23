@@ -1,6 +1,8 @@
 import os
 import json
+import time
 from imagehat.parsers.jpeg_parser import JPEGParser
+
 
 
 def convert_bytes(obj):
@@ -22,7 +24,7 @@ def convert_bytes(obj):
 
 
 def extract_metadata_from_folder(
-    folder_path: str, verbose: str = "complete", metrics: bool = False
+    folder_path: str, verbose: str = "complete"
 ) -> dict:
     """
     Extracts metadata from all JPEG images in a folder using JPEGParser.get_image_datas().
@@ -37,7 +39,9 @@ def extract_metadata_from_folder(
     :return: Dictionary of image filenames mapped to metadata.
     :rtype: dict
     """
-    image_data_list = JPEGParser.get_image_datas(images=folder_path, verbose=verbose)
+    image_data_list = JPEGParser.get_image_datas(
+        images=folder_path, verbose=verbose
+    )
     return {
         entry["file_name"]: convert_bytes(entry["data"]) for entry in image_data_list
     }
@@ -47,7 +51,6 @@ def save_metadata_to_json(
     folder_path: str,
     output_folder: str = False,
     verbose: str = None,
-    metrics: bool = False,
 ):
     """
     Extracts metadata from images in a folder and saves it as a JSON file.
@@ -75,7 +78,9 @@ def save_metadata_to_json(
         os.makedirs(output_folder, exist_ok=True)
         output_path = os.path.join(output_folder, f"{folder_name}_metadata.json")
 
-        metadata = extract_metadata_from_folder(folder_path, verbose=verbose)
+        metadata = extract_metadata_from_folder(
+            folder_path, verbose=verbose
+        )
 
         if not metadata:
             return
@@ -93,7 +98,6 @@ def process_all_subfolders(
     base_folder: str,
     output_folder: str = None,
     verbose: str = None,
-    metrics: bool = False,
 ):
     """
     Iterates through all subfolders in a base directory and extracts metadata.
@@ -115,13 +119,16 @@ def process_all_subfolders(
         folder_path = os.path.join(base_folder, folder)
         if os.path.isdir(folder_path):
             save_metadata_to_json(
-                folder_path=folder_path, output_folder=output_folder, verbose=verbose
+                folder_path=folder_path,
+                output_folder=output_folder,
+                verbose=verbose,
             )
 
     print("Processing complete.")
 
 
 if __name__ == "__main__":
+    start = time.time()
     # Example usage when run directly (not imported)
     base_folder = os.path.join("datasets", "archive", "Dresden_Exp")
     # base_folder = os.path.join(
@@ -129,5 +136,9 @@ if __name__ == "__main__":
     # )
     # news_folder = os.path.join("datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende")
 
-    output_folder = os.path.join("datasets", "json_datasets", "newspaper_images")
+    output_folder = os.path.join("datasets", "json_datasets", "dresden_images")
     process_all_subfolders(base_folder, output_folder, verbose="complete")
+
+    end = time.time()
+    duration = end - start
+    print(f"\n✅ Done in {duration:.2f} seconds.")

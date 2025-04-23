@@ -972,7 +972,7 @@ class JPEGParser:
         # decimal_value = num / denom if denom else num  # Compute decimal representation
         return fraction_str
 
-    def get_exif_image_data(self, metrics=False) -> dict:
+    def get_exif_image_data(self) -> dict:
         """
         Extracts and returns EXIF metadata from the image.
 
@@ -1013,17 +1013,12 @@ class JPEGParser:
                 app1_info = {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
 
         output = {
-            "General File Info": general_info,
-            "JPEG Marker Segments": jpeg_marker_info,
             "APP1 Info": app1_info,
         }
 
-        if metrics:
-            output.update({"Metrics": self.compute_conformity_metrics()})
-
         return output
 
-    def get_complete_image_data(self, metrics=False) -> dict:
+    def get_complete_image_data(self) -> dict:
         """
         Extracts and returns a complete metadata report for the image.
 
@@ -1081,8 +1076,6 @@ class JPEGParser:
 
         if iptc_data:
             output.update({"IPTC Info": iptc_data})
-        if metrics:
-            output.update({"Metrics": self.compute_conformity_metrics()})
 
         self.file_data = output
         return output
@@ -1094,7 +1087,6 @@ class JPEGParser:
         verbose: str = "complete",
         limit: int = None,
         segment: tuple[int, int] = None,
-        metrics: bool = False,
     ) -> list[dict]:
         """
         Generates metadata reports for all images in a given folder.
@@ -1156,12 +1148,10 @@ class JPEGParser:
         if limit is not None:
             image_files = image_files[:limit]
 
-        return cls._verbosed_output(image_files, verbose=verbose, metrics=metrics)
+        return cls._verbosed_output(image_files, verbose=verbose)
 
     @classmethod
-    def _verbosed_output(
-        cls, image_files: list, verbose: str, metrics: bool = False
-    ) -> list[dict]:
+    def _verbosed_output(cls, image_files: list, verbose: str) -> list[dict]:
         """
         Helper method for get_image_datas(). Always includes conformity metrics.
 
@@ -1178,28 +1168,25 @@ class JPEGParser:
         else:
             image_objects = image_files
 
-        output = []
-        for img in image_objects:
-            if verbose == "complete":
-                data = img.get_complete_image_data()
-            elif verbose == "exif":
-                data = img.get_exif_image_data()
-            else:
-                raise ValueError(f"Invalid verbose option: '{verbose}'")
+        if verbose == "complete":
+            return [
+                {
+                    "file_name": os.path.basename(img.img_path),
+                    "data": img.get_complete_image_data(),
+                }
+                for img in image_objects
+            ]
 
-            entry = {
-                "file_name": os.path.basename(img.img_path),
-                "data": data,
-            }
-
-            try:
-                entry.update({"Metrics", img.compute_conformity_metrics()})
-            except Exception as e:
-                pass
-
-            output.append(entry)
-
-        return output
+        elif verbose == "exif":
+            return [
+                {
+                    "file_name": os.path.basename(img.img_path),
+                    "data": img.get_exif_image_data(),
+                }
+                for img in image_objects
+            ]
+        else:
+            raise ValueError(f"Invalid verbose option: '{verbose}'")
 
     def _get_tag_id(self, tag_name: str) -> bytes | None:
         if tag_name.lower() == "unknown":
@@ -1424,5 +1411,5 @@ if __name__ == "__main__":
     # img.compute_conformity_metrics()
     # print(img.app1_data.keys())
 
-    o = JPEGParser.get_image_datas(list_of_images, verbose="exif", metrics=True)
+    o = JPEGParser.get_image_datas(list_of_images, verbose="exif")
     print(o[-3])
