@@ -4,7 +4,6 @@ import time
 from imagehat.parsers.jpeg_parser import JPEGParser
 
 
-
 def convert_bytes(obj):
     """
     Recursively convert bytes to hex for JSON compatibility.
@@ -23,122 +22,107 @@ def convert_bytes(obj):
     return obj
 
 
-def extract_metadata_from_folder(
-    folder_path: str, verbose: str = "complete"
-) -> dict:
-    """
-    Extracts metadata from all JPEG images in a folder using JPEGParser.get_image_datas().
-
-    :param folder_path: Path to the folder containing images.
-    :type folder_path: str
-    :param verbose: Verbosity mode. Options:
-                    - "complete" (default): Full metadata.
-                    - "exif": Only EXIF metadata.
-    :type verbose: str, optional
-
-    :return: Dictionary of image filenames mapped to metadata.
-    :rtype: dict
-    """
-    image_data_list = JPEGParser.get_image_datas(
-        images=folder_path, verbose=verbose
-    )
-    return {
-        entry["file_name"]: convert_bytes(entry["data"]) for entry in image_data_list
-    }
-
-
-def save_metadata_to_json(
-    folder_path: str,
-    output_folder: str = False,
-    verbose: str = None,
+def process_folders(
+    base_folder: str, output_folder: str, fname: str, verbose: str = "complete"
 ):
-    """
-    Extracts metadata from images in a folder and saves it as a JSON file.
 
-    :param folder_path: Path to the folder containing images.
-    :type folder_path: str
-    :param output_folder: Directory where the JSON file will be saved.
-    :type output_folder: str
-    :param verbose: Verbosity mode. Options:
-                    - None (default): Full metadata.
-                    - "exif": Only EXIF metadata.
-    :type verbose: str, optional
-
-    :return: None
-    """
-    try:
-        if output_folder:
-            output_folder = os.path.join("datasets/json_datasets", output_folder)
-        else:
-            output_folder = "datasets/json_datasets"
-
-        os.makedirs(output_folder, exist_ok=True)
-
-        folder_name = os.path.basename(os.path.normpath(folder_path))
-        os.makedirs(output_folder, exist_ok=True)
-        output_path = os.path.join(output_folder, f"{folder_name}_metadata.json")
-
-        metadata = extract_metadata_from_folder(
-            folder_path, verbose=verbose
-        )
-
-        if not metadata:
-            return
-
-        with open(output_path, "w", encoding="utf-8") as json_file:
-            json.dump(metadata, json_file, indent=4)
-
-        print(f"Metadata saved for folder '{folder_name}' → {output_path}")
-
-    except Exception as e:
-        print(f"Error processing folder '{folder_path}': {e}")
-
-
-def process_all_subfolders(
-    base_folder: str,
-    output_folder: str = None,
-    verbose: str = None,
-):
-    """
-    Iterates through all subfolders in a base directory and extracts metadata.
-
-    :param base_folder: Root directory containing subfolders.
-    :type base_folder: str
-    :param verbose: Verbosity mode. See `save_metadata_to_json`.
-    :type verbose: str, optional
-
-    :return: None
-    """
     if not os.path.isdir(base_folder):
-        print(f"Error: The directory '{base_folder}' does not exist.")
-        return
+        print(f"[ERROR] Base folder does not exist: {base_folder}")
+        return ValueError("Could not see: {basefolder} due to {error}")
 
-    print("Processing folders in:", base_folder, "...")
+    print(f"[INFO] Searching and processing Dresden images in {base_folder}...\n")
 
-    for folder in os.listdir(base_folder):
-        folder_path = os.path.join(base_folder, folder)
-        if os.path.isdir(folder_path):
-            save_metadata_to_json(
-                folder_path=folder_path,
-                output_folder=output_folder,
-                verbose=verbose,
-            )
+    all_metadata = {}
 
-    print("Processing complete.")
+    for device_name in os.listdir(base_folder):
+        device_folder_path = os.path.join(base_folder, device_name)
+
+        if not os.path.isdir(device_folder_path):
+            continue  # Skip if not a folder
+
+        print(f"[INFO] Processing folder ... {device_name}")
+
+        for file_name in os.listdir(device_folder_path):
+            img_path = os.path.join(device_folder_path, file_name)
+
+            if img_path.lower().endswith((".jpg", ".jpeg")):
+                try:
+                    parser = JPEGParser(img_path)
+                    if verbose == "complete":
+                        meta = parser.get_complete_image_data()
+                    elif verbose == "exif":
+                        meta = parser.get_exif_image_data()
+
+                    metrics = parser.compute_conformity_metrics()
+                    meta["Metrics"] = metrics
+
+                    full_key = os.path.join(device_name, file_name)
+                    all_metadata[full_key] = meta
+
+                except Exception as e:
+                    print(f"[ERROR] Failed to process {img_path}: {e}")
+        print(f"[INFO] Finished processing ... {device_name}")
+
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    output_file_path = os.path.join(output_folder, f"{fname}_metadata.json")
+
+    with open(output_file_path, "w", encoding="utf-8") as f:
+        json.dump(convert_bytes(all_metadata), f, indent=4)
+
+    print(f"\n✅ Metadata saved ➔ {output_file_path}")
 
 
 if __name__ == "__main__":
     start = time.time()
-    # Example usage when run directly (not imported)
+
+    # base_folder = os.path.join("datasets", "divnoise_dataset", "Canon1")
+    # output_folder = os.path.join("json_datasets", "divnoise_images")
+
+    # base_folder = os.path.join("datasets", "divnoise_dataset", "Canon2")
+    # output_folder = os.path.join("json_datasets", "divnoise_images")
+
     base_folder = os.path.join("datasets", "archive", "Dresden_Exp")
-    # base_folder = os.path.join(
-    #     "datasets", "scraped_news_images", "downloaded_images"
-    # )
-    # news_folder = os.path.join("datasets", "scraped_news_images", "downloaded_images", "Bergens_Tidende")
-
     output_folder = os.path.join("datasets", "json_datasets", "dresden_images")
-    process_all_subfolders(base_folder, output_folder, verbose="complete")
 
-    end = time.time()
-    duration = end - start
-    print(f"\n✅ Done in {duration:.2f} seconds.")
+    process_folders(base_folder, output_folder, "dresden", verbose="complete")
+
+    # end = time.time()
+    # print(f"\n✅ Done in {end - start:.2f} seconds.")
+
+    ##can you tweek this file such that i can search through in the folder branches of divnoise dataset and return json files as found in json_datasets/dresden_images
+    ##and also add a function to save the json files in the same folder as the images
+
+    # NOTE that this function is used for divnoise dataset structure only
+    # def get_all_jpg_folders(base_folder: str) -> list:
+    #     """
+    #     Recursively searches for folders named 'JPG' in the directory tree starting from base_folder.
+
+    #     :param base_folder: Root directory to start the search.
+    #     :type base_folder: str
+
+    #     :return: List of relative paths to folders named 'JPG'.
+    #     :rtype: list
+    #     """
+    #     jpg_folders = []
+    #     for root, dirs, files in os.walk(base_folder):
+    #         for dir_name in dirs:
+    #             if dir_name == "JPG":
+    #                 relative_path = os.path.relpath(os.path.join(root, dir_name), base_folder)
+    #                 jpg_folders.append(relative_path)
+    #     return jpg_folders
+
+    # jpg_folders_list = get_all_jpg_folders("datasets/divnoise_dataset/Others")
+    # print(jpg_folders_list)
+
+    # divnoise_part0 = [
+    #     "Canon1/Canon_EOS6DMarkII_Rear_0/Images/Flat/JPG",
+    #     "Canon1/Canon_EOS6DMarkII_Rear_0/Images/Natural/JPG",
+    #     "Canon1/Canon_EOS6DMarkII_Rear_1/Images/Flat/JPG",
+    #     "Canon1/Canon_EOS6DMarkII_Rear_1/Images/Natural/JPG",
+    #     "Canon1/Canon_EOS6DMarkII_Rear_2/Images/Flat/JPG",
+    #     "Canon1/Canon_EOS6DMarkII_Rear_2/Images/Natural/JPG",
+    #     "Canon1/Canon_EOS6DMarkII_Rear_3/Images/Flat/JPG",
+    #     "Canon1/Canon_EOS6DMarkII_Rear_3/Images/Natural/JPG",
+    # ]

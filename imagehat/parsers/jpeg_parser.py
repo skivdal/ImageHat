@@ -126,7 +126,8 @@ class JPEGParser:
                 ):  # JPEG files start with 0xFFD8
                     raise ValueError("File is not a valid JPEG (missing SOI marker).")
         except Exception as e:
-            raise RuntimeError(f"Error reading file: {e}") from e
+            # raise RuntimeError(f"Error reading file: {e}") from e
+            print(f"Error reading file: {e}")
 
     @classmethod
     def help(cls) -> None:
@@ -156,41 +157,36 @@ class JPEGParser:
             return self.binary_repr[:end]
         return self.binary_repr[start:end]
 
-    def _read_jpeg_markers(self) -> dict[int | list[int]]:
+    def _read_jpeg_markers(self) -> dict:
         """
         Identifies and extracts key JPEG markers in the binary image.
 
         This method scans the binary representation of the image to locate JPEG markers,
-        count their occurrences, and determine their byte offsets. Currently, it is limited
-        to finding only the **first** occurrence of each marker, as overlapping markers
-        make deeper analysis challenging
-
-        .. note::
-            Due to the complexity of marker placement in JPEG images, this method does not
-            guarantee the extraction of all markers if multiple overlapping occurences exist.
-            As they usually do.
+        count their occurrences, and determine their byte offsets.
 
         :return: A dictionary where keys represent marker names, and values contain marker-specific
-                 metadata, including occurrence count and byte offsets.
+                metadata, including occurrence count and byte offsets.
         :rtype: dict
-
         """
         try:
             pos = 0
             markers = {}
 
             while pos < len(self.binary_repr):
+                # Ensure we are at a marker (0xFF)
                 if self.binary_repr[pos] != 0xFF:
                     pos += 1
                     continue
 
+                # Get the marker byte
                 marker_byte = self.binary_repr[pos + 1]
-                if marker_byte == 0x00:
+                if marker_byte == 0x00:  # Skip padding bytes
                     pos += 2
                     continue
 
                 marker = bytes([0xFF, marker_byte])
 
+                # Handle restart markers (RST0-RST7)
                 if 0xD0 <= marker_byte <= 0xD7:
                     marker_name = f"RST{marker_byte - 0xD0}"
                     markers[marker_name] = {
@@ -200,14 +196,16 @@ class JPEGParser:
                     pos += 2
                     continue
 
+                # Get marker name
                 marker_name = MARKER_SEGMENTS_JPEG_ADDRESS.get(
                     marker, f"Unknown_{marker.hex().upper()}"
                 )
 
-                if marker_name not in markers:
-                    markers[marker_name] = "Unknown Marker"
+                # Avoid duplicate markers
+                if marker_name in markers:
+                    marker_name = f"{marker_name}_{len(markers)}"
 
-                # SOI and EOI have no byte size
+                # SOI and EOI markers have no size
                 if marker in [b"\xff\xd8", b"\xff\xd9"]:
                     markers[marker_name] = {
                         "offset": pos,
@@ -216,26 +214,33 @@ class JPEGParser:
                     pos += 2
                     continue
 
-                # Error handling incase of out of bounds
+                # Ensure we have enough bytes to read the segment size
                 if pos + 4 > len(self.binary_repr):
+                    # print(f"[WARN] Incomplete marker at position {pos}. Skipping.")
                     break
 
+                # Read segment size (2 bytes after the marker)
                 segment_size = int.from_bytes(
                     self.binary_repr[pos + 2 : pos + 4], "big"
                 )
                 segment_end = pos + 2 + segment_size
 
-                # Error handling incase of out of bounds
+                # Ensure the segment does not exceed the file length
                 if segment_end > len(self.binary_repr):
+                    # print(f"[WARN] Segment at position {pos} exceeds file length. Skipping.")
                     break
 
+                # Record marker information
                 markers[marker_name] = {
                     "offset": pos,
                     "size": segment_size,
                 }
 
-                pos = segment_end  # move to next marker
+                # Move to the next marker
+                pos = segment_end
+
             return markers
+
         except Exception as e:
             return {"[ERROR]": f"Failed to parse JPEG marker segments: {e}"}
 
@@ -251,157 +256,154 @@ class JPEGParser:
                  size, position, structural integrity, but also .
         :rtype: dict
         """
-        try:
-            report = {}
+        # try:
+        report = {}
 
-            # Recording APP1 segment size (s.b. 2 bytes)
-            app1_size = int.from_bytes(
-                self.binary_repr[app1_offset + 2 : app1_offset + 4], byteorder="big"
-            )
-            if app1_offset + app1_size > len(self.binary_repr):
-                raise ValueError("APP1 segment size exceeds image binary length.")
+        # Recording APP1 segment size (s.b. 2 bytes)
+        app1_size = int.from_bytes(
+            self.binary_repr[app1_offset + 2 : app1_offset + 4], byteorder="big"
+        )
+        if app1_offset + app1_size > len(self.binary_repr):
+            raise ValueError("APP1 segment size exceeds image binary length.")
 
-            report["APP1 Size"] = (
-                app1_size  # For latter, add failsafe if segment > 64 kb
-            )
+        report["APP1 Size"] = app1_size  # For latter, add failsafe if segment > 64 kb
 
-            # Recording start of APP1 segment
-            app1_location_start = app1_offset
-            report["Start of APP1"] = app1_location_start
+        # Recording start of APP1 segment
+        app1_location_start = app1_offset
+        report["Start of APP1"] = app1_location_start
 
-            # Recording end of APP1 segment
-            app1_location_end = app1_offset + app1_size
-            report["End of APP1"] = app1_location_end
-            self._APP1_SEGMENT = self.binary_repr[
-                app1_location_start : app1_location_start + app1_size
+        # Recording end of APP1 segment
+        app1_location_end = app1_offset + app1_size
+        report["End of APP1"] = app1_location_end
+        self._APP1_SEGMENT = self.binary_repr[
+            app1_location_start : app1_location_start + app1_size
+        ]
+
+        # Recording EXIF identifier (s.b. 4 bytes, 6 bytes including padding)
+        exif_identifier = self._APP1_SEGMENT.find(IDENTIFIERS["exif_identifier"])
+        report["EXIF Identifier Offset"] = (
+            exif_identifier if exif_identifier != -1 else None
+        )
+
+        # Recording byte order (should be 2 bytes)
+        # Recodring endianness starts here. EXIF is big-endian until byte-order is discovered.
+        byte_order_offset, detected_byte_order = self._find_target_byte(
+            self._APP1_SEGMENT[:25], targets=[IDENTIFIERS["II"], IDENTIFIERS["MM"]]
+        )
+
+        # if missing, assume 'MM'
+        if detected_byte_order is None:
+            byte_order_bytes = b"MM"  # Default assumption
+            byte_order_offset = -1  # Optional: indicate it was assumed
+            endianness = ">"
+            report["Byte Order"] = byte_order_bytes
+            report["Byte Order Offset"] = byte_order_offset
+            # print("[WARN]: Byte Order not detected in this media file.")
+        elif detected_byte_order:
+            byte_order_bytes = self._APP1_SEGMENT[
+                byte_order_offset : byte_order_offset + 2
             ]
+            # Setting endianness for the rest of runtime
+            endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
+            report["Byte Order"] = repr(detected_byte_order)
+            report["Byte Order Offset"] = byte_order_offset
 
-            # Recording EXIF identifier (s.b. 4 bytes, 6 bytes including padding)
-            exif_identifier = self._APP1_SEGMENT.find(IDENTIFIERS["exif_identifier"])
-            report["EXIF Identifier Offset"] = (
-                exif_identifier if exif_identifier != -1 else None
+        # Recording magic number (should be 2 bytes)
+        magic_number = self._convert_internal_identifier(
+            endianness, "H", "tiff_magic_number"
+        )
+        magic_number_offset = self._APP1_SEGMENT.find(magic_number)
+        magic_number_bytes = self._APP1_SEGMENT[
+            magic_number_offset : magic_number_offset + 2
+        ]
+        magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
+        report["TIFF Magic Number Offset"] = (
+            magic_number_offset if magic_number_offset != -1 else None
+        )
+
+        ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
+        ### Always unpack constants in big endian from project files.
+
+        # Recording offset to first IDF (should be 4 bytes)
+        ifd_temp = self._convert_internal_identifier(
+            endianness=endianness, datatype="I", id="offset_first_ifd"
+        )
+        ifd_offset = self._APP1_SEGMENT.find(ifd_temp)
+        ifd_offset_bytes = self._APP1_SEGMENT[ifd_offset : ifd_offset + 4]
+        ifd_start = (
+            byte_order_offset + struct.unpack(f"{endianness}I", ifd_offset_bytes)[0]
+        )
+
+        # Entries recorded within the 0th IFD
+        ifd_entries = struct.unpack(
+            f"{endianness}H", self._APP1_SEGMENT[ifd_start : ifd_start + 2]
+        )[0]
+        report["0th IFD Offset"] = ifd_offset
+        report["Entries in 0th IFD"] = ifd_entries
+
+        # Recording the 0th tags. NOTE: Most important, do not touch.
+        # The 0th IFD includes Image Related tags, pointer to the GPS IFD and the EXIF IFD.
+        if report["0th IFD Offset"]:
+            first_ifd_info, tiff_data = self._read_first_ifd(
+                ifd_start=ifd_start,
+                num_entries=ifd_entries,
+                tiff_header_offset=byte_order_offset,
+                endianness=endianness,
             )
+            report["0th IFD Information"] = first_ifd_info
+            report["0th IFD Data"] = tiff_data
+            self.first_ifd_data = tiff_data
 
-            # Recording byte order (should be 2 bytes)
-            # Recodring endianness starts here. EXIF is big-endian until byte-order is discovered.
-            byte_order_offset, detected_byte_order = self._find_target_byte(
-                self._APP1_SEGMENT[:25], targets=[IDENTIFIERS["II"], IDENTIFIERS["MM"]]
+        # Recoring the EXIF IFD.
+        # The EXIF IFD includes Camera Device Realted tags, pointer to the Interoperability IFD.
+        if first_ifd_info["Offset to EXIF IFD"]:
+            exif_ifd_info, exif_data = self._read_exif_ifd(
+                ifd_start=first_ifd_info["Offset to EXIF IFD"],
+                num_entries=first_ifd_info["Number of EXIF Entries"],
+                tiff_header_offset=byte_order_offset,
+                endianness=endianness,
             )
+            report["EXIF IFD Info"] = exif_ifd_info
+            report["EXIF IFD Data"] = exif_data
+            self.exif_ifd_data = exif_data
 
-            # if missing, assume 'MM'
-            if detected_byte_order is None:
-                byte_order_bytes = b"MM"  # Default assumption
-                byte_order_offset = -1  # Optional: indicate it was assumed
-                endianness = ">"
-                report["Byte Order"] = byte_order_bytes
-                report["Byte Order Offset"] = byte_order_offset
-                print("[WARN]: Byte Order not detected in this media file.")
-            elif detected_byte_order:
-                byte_order_bytes = self._APP1_SEGMENT[
-                    byte_order_offset : byte_order_offset + 2
-                ]
-                # Setting endianness for the rest of runtime
-                endianness = "<" if byte_order_bytes == IDENTIFIERS["II"] else ">"
-                report["Byte Order"] = repr(detected_byte_order)
-                report["Byte Order Offset"] = byte_order_offset
-
-            # Recording magic number (should be 2 bytes)
-            magic_number = self._convert_internal_identifier(
-                endianness, "H", "tiff_magic_number"
+        # Recoring the GPS EXIF tags.
+        if first_ifd_info["Offset to GPS IFD"]:
+            gps_data = self._read_gps_ifd(
+                ifd_start=first_ifd_info["Offset to GPS IFD"],
+                num_entries=first_ifd_info["Number of GPS Entries"],
+                tiff_header_offset=byte_order_offset,
+                endianness=endianness,
             )
-            magic_number_offset = self._APP1_SEGMENT.find(magic_number)
-            magic_number_bytes = self._APP1_SEGMENT[
-                magic_number_offset : magic_number_offset + 2
-            ]
-            magic_number = struct.unpack(f"{endianness}H", magic_number_bytes)[0]
-            report["TIFF Magic Number Offset"] = (
-                magic_number_offset if magic_number_offset != -1 else None
+            report["GPS IFD Data"] = gps_data
+
+            self.gps_ifd_data = gps_data
+
+        # Recoring the GPS EXIF tags.
+        if exif_ifd_info["Offset to Interop IFD"]:
+            interop_data = self._read_interop_ifd(
+                ifd_start=exif_ifd_info["Offset to Interop IFD"],
+                num_entries=exif_ifd_info["Number of Interop Entries"],
+                tiff_header_offset=byte_order_offset,
+                endianness=endianness,
             )
+            report["Interop IFD Data"] = interop_data
+            self.interop_ifd_data = interop_data
 
-            ### Extremely important NOTE. All markers and tags in the JEITA documentations are displayed in MSB.
-            ### Always unpack constants in big endian from project files.
-            comp_magic_number = struct.unpack(">H", IDENTIFIERS["tiff_magic_number"])[0]
-
-            # Recording offset to first IDF (should be 4 bytes)
-            ifd_temp = self._convert_internal_identifier(
-                endianness=endianness, datatype="I", id="offset_first_ifd"
+        # Recording the Thumbnail TIFF Tags.
+        if first_ifd_info["Offset to 1st IFD"]:
+            thumbnail_data = self._read_thumbnail_ifd(
+                ifd_start=first_ifd_info["Offset to 1st IFD"],
+                num_entries=first_ifd_info["Number of 1st IFD Entries"],
+                tiff_header_offset=byte_order_offset,
+                endianness=endianness,
             )
-            ifd_offset = self._APP1_SEGMENT.find(ifd_temp)
-            ifd_offset_bytes = self._APP1_SEGMENT[ifd_offset : ifd_offset + 4]
-            ifd_start = (
-                byte_order_offset + struct.unpack(f"{endianness}I", ifd_offset_bytes)[0]
-            )
+            report["1st IFD Data"] = thumbnail_data
+            self.thumbnail_ifd_data = thumbnail_data
 
-            # Entries recorded within the 0th IFD
-            ifd_entries = struct.unpack(
-                f"{endianness}H", self._APP1_SEGMENT[ifd_start : ifd_start + 2]
-            )[0]
-            report["0th IFD Offset"] = ifd_offset
-            report["Entries in 0th IFD"] = ifd_entries
-
-            # Recording the 0th tags. NOTE: Most important, do not touch.
-            # The 0th IFD includes Image Related tags, pointer to the GPS IFD and the EXIF IFD.
-            if report["0th IFD Offset"]:
-                first_ifd_info, tiff_data = self._read_first_ifd(
-                    ifd_start=ifd_start,
-                    num_entries=ifd_entries,
-                    tiff_header_offset=byte_order_offset,
-                    endianness=endianness,
-                )
-                report["0th IFD Information"] = first_ifd_info
-                report["0th IFD Data"] = tiff_data
-                self.first_ifd_data = tiff_data
-
-            # Recoring the EXIF IFD.
-            # The EXIF IFD includes Camera Device Realted tags, pointer to the Interoperability IFD.
-            if first_ifd_info["Offset to EXIF IFD"]:
-                exif_ifd_info, exif_data = self._read_exif_ifd(
-                    ifd_start=first_ifd_info["Offset to EXIF IFD"],
-                    num_entries=first_ifd_info["Number of EXIF Entries"],
-                    tiff_header_offset=byte_order_offset,
-                    endianness=endianness,
-                )
-                report["EXIF IFD Info"] = exif_ifd_info
-                report["EXIF IFD Data"] = exif_data
-                self.exif_ifd_data = exif_data
-
-            # Recoring the GPS EXIF tags.
-            if first_ifd_info["Offset to GPS IFD"]:
-                gps_data = self._read_gps_ifd(
-                    ifd_start=first_ifd_info["Offset to GPS IFD"],
-                    num_entries=first_ifd_info["Number of GPS Entries"],
-                    tiff_header_offset=byte_order_offset,
-                    endianness=endianness,
-                )
-                report["GPS IFD Data"] = gps_data
-
-                self.gps_ifd_data = gps_data
-
-            # Recoring the GPS EXIF tags.
-            if exif_ifd_info["Offset to Interop IFD"]:
-                interop_data = self._read_interop_ifd(
-                    ifd_start=exif_ifd_info["Offset to Interop IFD"],
-                    num_entries=exif_ifd_info["Number of Interop Entries"],
-                    tiff_header_offset=byte_order_offset,
-                    endianness=endianness,
-                )
-                report["Interop IFD Data"] = interop_data
-                self.interop_ifd_data = interop_data
-
-            # Recording the Thumbnail TIFF Tags.
-            if first_ifd_info["Offset to 1st IFD"]:
-                thumbnail_data = self._read_thumbnail_ifd(
-                    ifd_start=first_ifd_info["Offset to 1st IFD"],
-                    num_entries=first_ifd_info["Number of 1st IFD Entries"],
-                    tiff_header_offset=byte_order_offset,
-                    endianness=endianness,
-                )
-                report["1st IFD Data"] = thumbnail_data
-                self.thumbnail_ifd_data = thumbnail_data
-
-            return report
-        except Exception as e:
-            return {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
+        return report
+        # except Exception as e:
+        #     return {"[ERROR]": f"Failed to parse APP1 segment: {e}"}
 
     def _find_target_byte(self, data: bytes, targets: list[bytes]) -> None | int | str:
         """
@@ -1395,21 +1397,22 @@ if __name__ == "__main__":
     list_of_images = [
         os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
     ]
-    # images = [JPEGParser(img) for img in list_of_images]
 
-    # # list_of_images_news = [
-    # #     os.path.join(news_folder, fp)
-    # #     for fp in os.listdir(news_folder)
-    # #     if fp.lower().endswith((".jpg", ".jpeg"))
-    # # ]
+    images = [JPEGParser(img) for img in list_of_images]
 
-    # print(JPEGParser(document_image_alt).get_complete_image_data())
-    # images_data = [img.get_complete_image_data() for img in images]
+    data = [img.get_complete_image_data() for img in images]
+    metrics = [img.compute_conformity_metrics() for img in images]
 
-    # img = JPEGParser(document_image_alt)
-    # img.get_complete_image_data()
-    # img.compute_conformity_metrics()
-    # print(img.app1_data.keys())
+    
 
-    o = JPEGParser.get_image_datas(list_of_images, verbose="exif")
-    print(o[-3])
+    # n = set()
+    # # print(*metrics, sep="\n\n")'
+    # for i in metrics:
+    #     wtos = i.get("Weak Tag Order Score", 0)
+    #     val = wtos.get("EXIF")
+    #     print(val)
+    #     n.add(val)
+    # print(n)
+    # print(len(metrics), len(n))
+    
+    

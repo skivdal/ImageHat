@@ -9,7 +9,7 @@ PENALTY_SCALE = {
     "O": lambda present, struct: 0,
     "N": lambda present, struct: 1 if present else 0,
     "J": lambda present, struct: 1 if present else 0,
-    "U": lambda present, struct: 0.4 if not present else 0,
+    "U": lambda present, struct: 0.6 if not present else 0,
 }
 
 def get_baseline_order(tag_dict: dict) -> list[bytes]:
