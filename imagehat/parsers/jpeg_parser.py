@@ -1,7 +1,8 @@
 import os
 import os.path
 import struct
-from imagehat.identifiers.extensions import JPEG_EXTENSIONS
+from imagehat.parsers.base_parser import BaseParser
+from imagehat.identifiers.extensions import VALID_EXTENSIONS
 
 from imagehat.identifiers.jpeg_specific_identifiers import (
     IDENTIFIERS,
@@ -11,7 +12,7 @@ from imagehat.identifiers.jpeg_marker_segments import (
     MARKER_SEGMENTS_JPEG_ADDRESS,
     MARKER_SEGMENTS_JPEG_NAME,
 )
-from imagehat.identifiers.eixf_attribute_information import (
+from imagehat.identifiers.exif_attribute_information import (
     TAG_TYPES,
     OVERFLOW_TYPES,
     EXIF_TAG_DICT_REV,
@@ -23,7 +24,7 @@ from imagehat.identifiers.eixf_attribute_information import (
     ALL_EXIF_TAGS,
     EXIF_TAGS,
 )
-from imagehat.identifiers.support_levels import ALL_SUPPORT_LEVELS
+from imagehat.identifiers.exif_support_levels import ALL_SUPPORT_LEVELS
 from imagehat.identifiers.iptc_attribute_information import (
     IPTC_TAGS,
 )
@@ -37,7 +38,7 @@ from imagehat.utils.metrics import (
 )
 
 
-class JPEGParser:
+class JPEGParser(BaseParser):
     """
     The JPEGParser class is a sub class of the ImageHat super class. It is designed to analyze binary image files and
     extract EXIF metadata directly from from binary image files. It supports methods for parsing JPEG, extracting EXIF
@@ -79,7 +80,7 @@ class JPEGParser:
         self.header_validity_score: float | None = None
         self.tag_validity_score: float | None = None
         self.weak_tag_order_score: float | None = None
-        self.weak_tag_order_score: float | None = None
+        self.strict_tag_order_score: float | None = None
         self.ecs: float | None = None  # Final score
 
     def get_binary_data(self) -> bytes:
@@ -112,22 +113,36 @@ class JPEGParser:
             )
 
         _, ext = os.path.splitext(self.img_path)
-        if ext.lower() not in JPEG_EXTENSIONS:
+        if ext.lower() not in VALID_EXTENSIONS:
             raise ValueError(
                 f"Invalid file format '{ext}'. Supported formats: .jpg, .jpeg."
             )
 
         try:
-            # Easy validation, should be rendered
             with open(self.img_path, "rb") as f:
-                header = f.read(2)
-                if (
-                    header != MARKER_SEGMENTS_JPEG_NAME["SOI"]
-                ):  # JPEG files start with 0xFFD8
-                    raise ValueError("File is not a valid JPEG (missing SOI marker).")
+                header = f.read(8)  # PNG signature is 8 bytes
+                if header != b'\x89PNG\r\n\x1a\n':
+                    raise ValueError(
+                        "[ERROR] Skipping file: Not a valid PNG (invalid signature)"
+                    )
         except Exception as e:
-            # raise RuntimeError(f"Error reading file: {e}") from e
             print(f"Error reading file: {e}")
+
+    def __str__(self) -> str:
+        """
+        Method used to show basic information the JPEGParser object.
+        """
+        return f"Image: {self.img_path}, Size: {len(self.binary_repr)} bytes"
+
+    def segment_data(self, end: int, start: int | None = None) -> None:
+        """
+        Metod for printing the whole byte array. Should be avoided as printed byte arrays are living nightmares.
+
+        :return: a segment of self.binary_repr
+        """
+        if start is None:
+            return self.binary_repr[:end]
+        return self.binary_repr[start:end]
 
     @classmethod
     def help(cls) -> None:
@@ -140,22 +155,6 @@ class JPEGParser:
         print(help(cls))
         print(cls.__doc__.strip())
         print(cls.help.__doc__.strip())
-
-    def __str__(self) -> str:
-        """
-        Method used to show basic information the JPEGParser object.
-        """
-        return f"ImageHat: {self.img_path}, Size: {len(self.binary_repr)} bytes"
-
-    def segment_data(self, end: int, start: int | None = None) -> None:
-        """
-        Metod for printing the whole byte array. Should be avoided as printed byte arrays are living nightmares.
-
-        :return: a segment of self.binary_repr
-        """
-        if start is None:
-            return self.binary_repr[:end]
-        return self.binary_repr[start:end]
 
     def _read_jpeg_markers(self) -> dict:
         """
@@ -238,7 +237,6 @@ class JPEGParser:
 
                 # Move to the next marker
                 pos = segment_end
-
             return markers
 
         except Exception as e:
@@ -278,6 +276,9 @@ class JPEGParser:
         self._APP1_SEGMENT = self.binary_repr[
             app1_location_start : app1_location_start + app1_size
         ]
+
+        if IDENTIFIERS["xmp_header"] in self._APP1_SEGMENT[:200]:
+            return {"error": "Includes XMP data."}
 
         # Recording EXIF identifier (s.b. 4 bytes, 6 bytes including padding)
         exif_identifier = self._APP1_SEGMENT.find(IDENTIFIERS["exif_identifier"])
@@ -356,7 +357,8 @@ class JPEGParser:
 
         # Recoring the EXIF IFD.
         # The EXIF IFD includes Camera Device Realted tags, pointer to the Interoperability IFD.
-        if first_ifd_info["Offset to EXIF IFD"]:
+        exif_ifd_info = None
+        if first_ifd_info is not None and first_ifd_info["Offset to EXIF IFD"]:
             exif_ifd_info, exif_data = self._read_exif_ifd(
                 ifd_start=first_ifd_info["Offset to EXIF IFD"],
                 num_entries=first_ifd_info["Number of EXIF Entries"],
@@ -368,7 +370,7 @@ class JPEGParser:
             self.exif_ifd_data = exif_data
 
         # Recoring the GPS EXIF tags.
-        if first_ifd_info["Offset to GPS IFD"]:
+        if first_ifd_info is not None and first_ifd_info["Offset to GPS IFD"]:
             gps_data = self._read_gps_ifd(
                 ifd_start=first_ifd_info["Offset to GPS IFD"],
                 num_entries=first_ifd_info["Number of GPS Entries"],
@@ -380,7 +382,7 @@ class JPEGParser:
             self.gps_ifd_data = gps_data
 
         # Recoring the GPS EXIF tags.
-        if exif_ifd_info["Offset to Interop IFD"]:
+        if exif_ifd_info is not None and exif_ifd_info.get("Offset to Interop IFD"):
             interop_data = self._read_interop_ifd(
                 ifd_start=exif_ifd_info["Offset to Interop IFD"],
                 num_entries=exif_ifd_info["Number of Interop Entries"],
@@ -391,7 +393,7 @@ class JPEGParser:
             self.interop_ifd_data = interop_data
 
         # Recording the Thumbnail TIFF Tags.
-        if first_ifd_info["Offset to 1st IFD"]:
+        if first_ifd_info is not None and first_ifd_info["Offset to 1st IFD"]:
             thumbnail_data = self._read_thumbnail_ifd(
                 ifd_start=first_ifd_info["Offset to 1st IFD"],
                 num_entries=first_ifd_info["Number of 1st IFD Entries"],
@@ -484,7 +486,7 @@ class JPEGParser:
             "Offset to EXIF IFD": False,
             "Number of EXIF Entries": False,
             "Offset to GPS IFD": False,
-            "Number of EXIF Entries": False,
+            "Number of GPS Entries": False,
             "Offset to 1st IFD": False,
             "Number of 1st IFD Entries": False,
         }
@@ -539,22 +541,36 @@ class JPEGParser:
             )
 
         next_ifd_pointer_offset = ifd_start + 2 + (12 * num_entries)
-        next_ifd_pointer_bytes = self._APP1_SEGMENT[
-            next_ifd_pointer_offset : next_ifd_pointer_offset + 4
-        ]
 
-        next_ifd_offset_relative = struct.unpack(
-            f"{endianness}I", next_ifd_pointer_bytes
-        )[0]
-        next_ifd_offset_absolute = tiff_header_offset + next_ifd_offset_relative
+        if next_ifd_pointer_offset + 4 <= len(self._APP1_SEGMENT):
+            next_ifd_pointer_bytes = self._APP1_SEGMENT[
+                next_ifd_pointer_offset : next_ifd_pointer_offset + 4
+            ]
 
-        num_next_ifd_entries = struct.unpack(
-            f"{endianness}H",
-            self._APP1_SEGMENT[next_ifd_offset_absolute : next_ifd_offset_absolute + 2],
-        )[0]
-        first_ifd_info["Offset to 1st IFD"] = next_ifd_offset_absolute
-        first_ifd_info["Number of 1st IFD Entries"] = num_next_ifd_entries
+            next_ifd_offset_relative = struct.unpack(
+                f"{endianness}I", next_ifd_pointer_bytes
+            )[0]
 
+            if next_ifd_offset_relative != 0:
+                next_ifd_offset_absolute = tiff_header_offset + next_ifd_offset_relative
+
+                if next_ifd_offset_absolute + 2 <= len(self._APP1_SEGMENT):
+                    num_next_ifd_entries = struct.unpack(
+                        f"{endianness}H",
+                        self._APP1_SEGMENT[
+                            next_ifd_offset_absolute : next_ifd_offset_absolute + 2
+                        ],
+                    )[0]
+                    first_ifd_info["Offset to 1st IFD"] = next_ifd_offset_absolute
+                    first_ifd_info["Number of 1st IFD Entries"] = num_next_ifd_entries
+                else:
+                    print(
+                        f"[WARN] 1st IFD pointer out of bounds: {next_ifd_offset_absolute}"
+                    )
+        else:
+            print(
+                "[WARN] Could not read 1st IFD pointer from offset {next_ifd_pointer_offset}"
+            )
         return (
             first_ifd_info,
             tiff_data,
@@ -567,6 +583,7 @@ class JPEGParser:
 
         for entry in range(num_entries):
             entry_offset = ifd_start + 2 + (entry * 12)
+
             tag, datatype, count, value = struct.unpack(
                 f"{endianness}HHII",
                 self._APP1_SEGMENT[entry_offset : entry_offset + 12],
@@ -775,7 +792,7 @@ class JPEGParser:
         absolute_offset = value + tiff_offset + self.marker_info["APP1"]["offset"]
 
         is_overflow = total_data_length > 4 or type_name in OVERFLOW_TYPES
-        is_big = value > 1024
+        is_big = int(value) > 1024
 
         if is_overflow:
             content_bytes = self._APP1_SEGMENT[
@@ -967,12 +984,18 @@ class JPEGParser:
         :return: A tuple containing a string representation of a fraction and a decimal value of the fraction
         :rtype: tuple
         """
-        num, denom = struct.unpack(f"{endianness}II", content_bytes)
-        fraction_str = (
-            f"{num}/{denom}" if denom else f"{num}/1"
-        )  # Avoid division by zero
-        # decimal_value = num / denom if denom else num  # Compute decimal representation
-        return fraction_str
+        if len(content_bytes) < 8:
+            return None
+        try:
+            num, denom = struct.unpack(f"{endianness}II", content_bytes)
+            fraction_str = (
+                f"{num}/{denom}" if denom else f"{num}/1"
+            )  # Avoid division by zero
+            # decimal_value = num / denom if denom else num  # Compute decimal representation
+            return fraction_str
+        except Exception as e:
+            print(f"[WARN] Failed to unpack rational value: {e}")
+            return None
 
     def get_exif_image_data(self) -> dict:
         """
@@ -1354,65 +1377,50 @@ class JPEGParser:
         }
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    # NOTE Use the below lines to test
-    # file_path_img = r"tests\testsets\testset-small\Sony_DSC_H50_Sony_DSC-H50_0_47713.JPG"
-    # img = JPEGParser(file_path_img)
-    # meta = img_get_image_data()
-    # print(meta)
-    # print(meta["APP1 Info"]["EXIF Info"]["EXIF DATA"])
+# # NOTE Use the below lines to test
+# # file_path_img = r"tests\testsets\testset-small\Sony_DSC_H50_Sony_DSC-H50_0_47713.JPG"
+# # img = JPEGParser(file_path_img)
+# # meta = img_get_image_data()
+# # print(meta)
+# # print(meta["APP1 Info"]["EXIF Info"]["EXIF DATA"])
 
-    # # NOTE: Testing on all camera models in Dresden Dataset
-    testset_folder = os.path.join("tests", "testsets", "testset-small")
-    # testset_folder = os.path.join("tests", "testsets", "testset-large")
+# # # NOTE: Testing on all camera models in Dresden Dataset
+# testset_folder = os.path.join("tests", "testsets", "testset-small")
+# # testset_folder = os.path.join("tests", "testsets", "testset-large")
 
-    news_folder = os.path.join(
-        "datasets", "scraped_news_images", "downloaded_images", "Document"
-    )
-    image_path = os.path.join(
-        "datasets",
-        "scraped_news_images",
-        "downloaded_images",
-        "Aftenposten",
-        "000f8538-a096-4975-b2df-9d352d8d8379.jpg",
-    )
-    document_image = os.path.join(
-        "datasets",
-        "scraped_news_images",
-        "downloaded_images",
-        "Document",
-        "2560px-protest-against-dakota-access-and-keystone-xl-pipelines-20170126-1641-1140x756.jpg",
-    )
-    document_image_alt = os.path.join(
-        "datasets",
-        "scraped_news_images",
-        "downloaded_images",
-        "Document",
-        "trine-folmoe-selvportrett-20250315-133351-scaled-e1742816457408-554x430.jpg",
-    )
-    gpt_img = r"C:\Users\saete\Downloads\ChatGPT Image 16. apr. 2025, 03_09_46.png"
-    gpt_jpg = r"C:\Users\saete\Downloads\DSC_style_landscape.jpg"
+# news_folder = os.path.join(
+#     "datasets", "scraped_news_images", "downloaded_images", "Document"
+# )
+# image_path = os.path.join(
+#     "datasets",
+#     "scraped_news_images",
+#     "downloaded_images",
+#     "Aftenposten",
+#     "000f8538-a096-4975-b2df-9d352d8d8379.jpg",
+# )
+# document_image = os.path.join(
+#     "datasets",
+#     "scraped_news_images",
+#     "downloaded_images",
+#     "Document",
+#     "2560px-protest-against-dakota-access-and-keystone-xl-pipelines-20170126-1641-1140x756.jpg",
+# )
+# document_image_alt = os.path.join(
+#     "datasets",
+#     "scraped_news_images",
+#     "downloaded_images",
+#     "Document",
+#     "trine-folmoe-selvportrett-20250315-133351-scaled-e1742816457408-554x430.jpg",
+# )
+# gpt_img = r"C:\Users\saete\Downloads\ChatGPT Image 16. apr. 2025, 03_09_46.png"
 
-    list_of_images = [
-        os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
-    ]
+# list_of_images = [
+#     os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
+# ]
 
-    images = [JPEGParser(img) for img in list_of_images]
+# images = [JPEGParser(img) for img in list_of_images]
 
-    data = [img.get_complete_image_data() for img in images]
-    metrics = [img.compute_conformity_metrics() for img in images]
-
-    
-
-    # n = set()
-    # # print(*metrics, sep="\n\n")'
-    # for i in metrics:
-    #     wtos = i.get("Weak Tag Order Score", 0)
-    #     val = wtos.get("EXIF")
-    #     print(val)
-    #     n.add(val)
-    # print(n)
-    # print(len(metrics), len(n))
-    
-    
+# data = [img.get_complete_image_data() for img in images]
+# metrics = [img.compute_conformity_metrics() for img in images]

@@ -1,11 +1,13 @@
 # All current available file extensions
 
-JPEG_EXTENSIONS = [
+VALID_EXTENSIONS = [
     ".jpeg",
     ".jpg",
     ".jpe",
     ".jfif",
     ".jfi",
+    ".png",
 ]
+
 
 VIDEO_EXTENSIONS = [".mp4", ".mov"]

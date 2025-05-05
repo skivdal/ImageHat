@@ -6,6 +6,7 @@ IDENTIFIERS = {
     "MM": b"\x4d\x4d",  # Motorola byte order, MSB first
     "tiff_magic_number": b"\x00\x2a",  # TIFF magic number verifies TIFF
     "offset_first_ifd": b"\x00\x00\x00\x08",  # Offset to the start  of the first IFD
+    "xmp_header": b"http://ns.adobe.com/xap/1.0/\x00"
 }
 
 # Used for indentifying character information in byte chuncks that are of type UNDEFINED
