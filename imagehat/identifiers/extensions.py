@@ -7,6 +7,7 @@ VALID_EXTENSIONS = [
     ".jfif",
     ".jfi",
     ".png",
+    ".webp",
 ]
 
 

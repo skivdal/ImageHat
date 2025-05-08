@@ -10,7 +10,6 @@ from imagehat.identifiers.jpeg_specific_identifiers import (
 )
 from imagehat.identifiers.jpeg_marker_segments import (
     MARKER_SEGMENTS_JPEG_ADDRESS,
-    MARKER_SEGMENTS_JPEG_NAME,
 )
 from imagehat.identifiers.exif_attribute_information import (
     TAG_TYPES,
@@ -22,7 +21,8 @@ from imagehat.identifiers.exif_attribute_information import (
     ALL_TAGS,
     ALL_TAGS_REV,
     ALL_EXIF_TAGS,
-    EXIF_TAGS,
+    TAG_TYPE_SIZE_BYTES,
+    RATIONAL_TYPES
 )
 from imagehat.identifiers.exif_support_levels import ALL_SUPPORT_LEVELS
 from imagehat.identifiers.iptc_attribute_information import (
@@ -120,10 +120,10 @@ class JPEGParser(BaseParser):
 
         try:
             with open(self.img_path, "rb") as f:
-                header = f.read(8)  # PNG signature is 8 bytes
-                if header != b'\x89PNG\r\n\x1a\n':
+                header = f.read(2)  # JPEG files start with 0xFFD8
+                if header != b"\xff\xd8":
                     raise ValueError(
-                        "[ERROR] Skipping file: Not a valid PNG (invalid signature)"
+                        "[ERROR] Skipping file: Not a valid JPEG (invalid SOI marker)"
                     )
         except Exception as e:
             print(f"Error reading file: {e}")
@@ -783,29 +783,39 @@ class JPEGParser(BaseParser):
         :rtype: dict
         """
 
-        type_name = TAG_TYPES.get(data_type, 7)  # Fetches type UNDEFINED if fails
+        type_name = TAG_TYPES.get(data_type, "UNDEFINED")  # Fetches type UNDEFINED if fails
         doc_type = self._get_tag_type(tag=tag, endianness=endianness)
         doc_count = self._get_tag_count(tag=tag, endianness=endianness)
 
-        size_of_type = TAG_TYPES.get(type, 1)
+        size_of_type = TAG_TYPE_SIZE_BYTES.get(data_type, 1)
         total_data_length = count * size_of_type
         absolute_offset = value + tiff_offset + self.marker_info["APP1"]["offset"]
 
         is_overflow = total_data_length > 4 or type_name in OVERFLOW_TYPES
-        is_big = int(value) > 1024
+        # is_big = int(value) > 1024
 
         if is_overflow:
             content_bytes = self._APP1_SEGMENT[
-                value + tiff_offset : value + count + tiff_offset
+                value + tiff_offset : value + tiff_offset + total_data_length
             ]
             content_offset = value
-            if type_name in OVERFLOW_TYPES:
-                content_bytes = self._APP1_SEGMENT[
-                    value + tiff_offset : value + tiff_offset + 8
-                ]
+            if total_data_length > 50:
+                value = f"Deferred @ abs offset: {absolute_offset}"
+            elif type_name in RATIONAL_TYPES:
                 value = self._parse_rational(content_bytes, endianness)
-            if is_big:
-                content_bytes = f"Deferred @ {absolute_offset} (abs offset)"
+            elif type_name in ["ASCII", "UTF-8"]:
+                try:
+                    value = content_bytes.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+                except Exception:
+                    value = content_bytes.hex()
+            elif type_name == "UNDEFINED":
+                value = content_bytes.hex()
+            elif type_name == "FLOAT":
+                value = struct.unpack(f"{endianness}f", content_bytes[:4])[0]
+            elif type_name == "DOUBLE":
+                value = struct.unpack(f"{endianness}d", content_bytes[:8])[0]
+            else:
+                value = int.from_bytes(content_bytes[:4], endianness)
 
             return {
                 "Markup": f"[{entry_offset}:{entry_offset+12}]",
@@ -817,14 +827,29 @@ class JPEGParser(BaseParser):
                 "Count": count,
                 "Expected Count": doc_count,
                 "Value Field Points To": absolute_offset,
-                "Content Bytes": repr(content_offset),
+                "Content Bytes": content_offset,
                 "Content Value": value,
                 "IFD Tag Order": order,
             }
-
+        
         inline_bytes = value.to_bytes(
-            4, byteorder="little" if endianness == "<" else "big"
-        )
+                    4, byteorder="little" if endianness == "<" else "big"
+                )
+        byteorder_str = "little" if endianness == "<" else "big"
+
+
+        if type_name in ["ASCII", "UTF-8"]:
+            try:
+                decoded = inline_bytes.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+            except Exception:
+                decoded = inline_bytes.hex()
+            content_value = decoded
+        elif type_name in RATIONAL_TYPES:
+            content_value = self._parse_rational(inline_bytes, endianness)
+        elif type_name == "FLOAT":
+            content_value = struct.unpack(f"{endianness}f", inline_bytes[:4])[0]
+        else:
+            content_value = int.from_bytes(inline_bytes[:4], byteorder_str)
 
         return {
             "Markup": f"[{entry_offset}:{entry_offset+12}]",
@@ -835,10 +860,13 @@ class JPEGParser(BaseParser):
             "Expected Type": doc_type,
             "Count": count,
             "Expected Count": doc_count,
-            "Content Bytes": inline_bytes,
-            "Content Value": value,
+            "Content Bytes": inline_bytes.hex(),
+            "Content Value": content_value,
             "IFD Tag Order": order,
         }
+
+
+
 
     def _read_iptc_data(self, app13_bytes: bytes) -> dict:
         """
@@ -1377,7 +1405,12 @@ class JPEGParser(BaseParser):
         }
 
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
+
+    path = r"D:\image_dataset\Images\Dresden_image_dataset\Agfa_DC-504_0\Agfa_DC-504_0_1.JPG"
+    img = JPEGParser(path)
+    print(img.binary_repr[406:450])
+    print(img.get_complete_image_data())
 
 # # NOTE Use the below lines to test
 # # file_path_img = r"tests\testsets\testset-small\Sony_DSC_H50_Sony_DSC-H50_0_47713.JPG"

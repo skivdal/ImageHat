@@ -78,81 +78,87 @@ def process_folders(
 
 if __name__ == "__main__":
     start = time.time()
-    # divnoise_canon1 = [
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_0\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_0\Images\Natural",
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_1\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_1\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_2\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_2\Images\Natural",
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_3\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon1\Canon_EOS6DMarkII_Rear_3\Images\Natural",
-    # ]
+    divnoise_canon1 = [
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_0\Images\Flat",
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_0\Images\Natural",
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_1\Images\Flat",
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_1\Images\Natural",
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_2\Images\Flat",
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_2\Images\Natural",
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_3\Images\Flat",
+        r"D:\image_dataset\Canon1\Canon_EOS6DMarkII_Rear_3\Images\Natural",
+    ]
 
-    # divnoise_canon2 = [
-    #     r"datasets\divnoise_dataset\Canon2\Canon_EOS6DMarkII_Rear_5\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon2\Canon_EOS6DMarkII_Rear_5\Images\Natural",
-    #     r"datasets\divnoise_dataset\Canon2\Canon_EOS6DMarkII_Rear_6\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon2\Canon_EOS6DMarkII_Rear_6\Images\Natural",
-    #     r"datasets\divnoise_dataset\Canon2\Canon_EOS6DMarkII_Rear_4\Images\Flat",
-    #     r"datasets\divnoise_dataset\Canon2\Canon_EOS6DMarkII_Rear_4\Images\Natural",
-    # ]
+    divnoise_canon2 = [
+        r"D:\image_dataset\Canon2\Canon_EOS6DMarkII_Rear_5\Images\Flat",
+        r"D:\image_dataset\Canon2\Canon_EOS6DMarkII_Rear_5\Images\Natural",
+        r"D:\image_dataset\Canon2\Canon_EOS6DMarkII_Rear_6\Images\Flat",
+        r"D:\image_dataset\Canon2\Canon_EOS6DMarkII_Rear_6\Images\Natural",
+        r"D:\image_dataset\Canon2\Canon_EOS6DMarkII_Rear_4\Images\Flat",
+        r"D:\image_dataset\Canon2\Canon_EOS6DMarkII_Rear_4\Images\Natural",
+    ]
 
-    # divnoise_canon3 = [
-    #     r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_0\Images\Flat",
-    #     r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_0\Images\Natural",
-    #     r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_1\Images\Flat",
-    #     r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_1\Images\Natural",
-    #     r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_2\Images\Flat",
-    #     r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_2\Images\Natural",
-    # ]
+    divnoise_canon3 = [
+        r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_0\Images\Flat",
+        r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_0\Images\Natural",
+        r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_1\Images\Flat",
+        r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_1\Images\Natural",
+        r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_2\Images\Flat",
+        r"D:\image_dataset\Canon3\Canon_EOS6D_Rear_2\Images\Natural",
+    ]
 
-    # divnoise_canon4 = [
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_0\Images\Flat",
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_0\Images\Natural",
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_1\Images\Flat",
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_1\Images\Natural",
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_2\Images\Flat",
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_2\Images\Natural",
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_3\Images\Flat",
-    #     r"D:\image_dataset\Canon4\Canon_EOSR_Rear_3\Images\Natural",
-    # ]
+    divnoise_canon4 = [
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_0\Images\Flat",
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_0\Images\Natural",
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_1\Images\Flat",
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_1\Images\Natural",
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_2\Images\Flat",
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_2\Images\Natural",
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_3\Images\Flat",
+        r"D:\image_dataset\Canon4\Canon_EOSR_Rear_3\Images\Natural",
+    ]
 
-    # divnoise_canon5 = [
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_4\Images\Flat",
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_4\Images\Natural",
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_5\Images\Flat",
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_5\Images\Natural",
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_6\Images\Flat",
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_6\Images\Natural",
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_7\Images\Flat",
-    #     r"D:\image_dataset\Canon5\Canon_EOSR_Rear_7\Images\Natural",
-    # ]
+    divnoise_canon5 = [
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_4\Images\Flat",
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_4\Images\Natural",
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_5\Images\Flat",
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_5\Images\Natural",
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_6\Images\Flat",
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_6\Images\Natural",
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_7\Images\Flat",
+        r"D:\image_dataset\Canon5\Canon_EOSR_Rear_7\Images\Natural",
+    ]
 
-    # base_name = os.path.join("D:\\", "image_dataset", "Others", "Others")
+    base_name = os.path.join("D:\\", "image_dataset", "Others")
 
-    # path_others = [
-    #     os.path.join(base_name, path)
-    #     for path in os.listdir(base_name)
-    #     if os.path.isdir(os.path.join(base_name, path))
-    # ]
+    path_others = [
+        os.path.join(base_name, path)
+        for path in os.listdir(base_name)
+        if os.path.isdir(os.path.join(base_name, path))
+    ]
 
-    # add1 = os.path.join("Images", "Flat")
-    # add2 = os.path.join("Images", "Natural")
-    # divnoise_others = []
-    # for path in path_others:
-    #     divnoise_others.extend([os.path.join(path, add1), os.path.join(path, add2)])
+    add1 = os.path.join("Images", "Flat")
+    add2 = os.path.join("Images", "Natural")
+    divnoise_others = []
+    for path in path_others:
+        divnoise_others.extend([os.path.join(path, add1), os.path.join(path, add2)])
 
-    base_folder = os.path.join("datasets", "scraped_news_images")
-    output_folder = os.path.join("datasets", "json_datasets", "scraped_news_images")
-    process_folders(base_folder, output_folder, "scraped_news.json", verbose="complete")
+    divnoise_complete = (
+        divnoise_canon1,
+        divnoise_canon2,
+        divnoise_canon3,
+        divnoise_canon4,
+        divnoise_canon5,
+        divnoise_others,
+    )
 
-
-
-    # for base_folder in divnoise_others:
-    #     output_folder = os.path.join("D:", "image_dataset", "Others")
-    #     name = base_folder.split("\\")[3]
-    #     process_folders(base_folder, output_folder, name, verbose="complete")
+    for sub in divnoise_complete:
+        for base_folder in sub:
+            device_name = os.path.basename(
+                os.path.dirname(os.path.dirname(base_folder))
+            )
+            output_folder = os.path.join("D:", "image_dataset", device_name)
+            process_folders(base_folder, output_folder, device_name, verbose="complete")
 
     end = time.time()
     print(f"\n✅ Done in {end - start:.2f} seconds.")

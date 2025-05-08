@@ -175,8 +175,6 @@ tests/testsets/get_testset.py
 # Parser
 imagehat/parsers/heic_parser.py
 imagehat/parsers/mov_parser.py
-imagehat/parsers/png_parser.py
 imagehat/parsers/tiff_parser.py
-imagehat/parsers/webp_parser.py
 
 

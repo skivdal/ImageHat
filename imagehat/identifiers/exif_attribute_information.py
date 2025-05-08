@@ -43,7 +43,7 @@ ANY = [
 
 TAG_TYPE_SIZE_BYTES = {
     "BYTE": 1,
-    "UTF_8": 1,
+    "UTF-8": 1,
     "ASCII": 1,
     "SHORT": 2,
     "LONG": 4,
@@ -77,6 +77,7 @@ TAG_TYPES = {
 # EXIF IFD. The value of such tags are represented with an offset to another location
 # in the binary image file.
 OVERFLOW_TYPES = ["RATIONAL", "SIGNED_RATIONAL", "DOUBLE"]
+RATIONAL_TYPES = ["RATIONAL", "SIGNED_RATIONAL"]
 
 # These are TIFF specific tags that are not a part of the EXIF standard, but found in the 0th IFD header
 TIFF_TAGS = {
