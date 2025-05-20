@@ -22,7 +22,7 @@ from imagehat.identifiers.exif_attribute_information import (
     ALL_TAGS_REV,
     ALL_EXIF_TAGS,
     TAG_TYPE_SIZE_BYTES,
-    RATIONAL_TYPES
+    RATIONAL_TYPES,
 )
 from imagehat.identifiers.exif_support_levels import ALL_SUPPORT_LEVELS
 from imagehat.identifiers.iptc_attribute_information import (
@@ -113,7 +113,7 @@ class JPEGParser(BaseParser):
             )
 
         _, ext = os.path.splitext(self.img_path)
-        if ext.lower() not in VALID_EXTENSIONS:
+        if ext.lower() not in ((".jpg", ".jpeg")):
             raise ValueError(
                 f"Invalid file format '{ext}'. Supported formats: .jpg, .jpeg."
             )
@@ -783,7 +783,9 @@ class JPEGParser(BaseParser):
         :rtype: dict
         """
 
-        type_name = TAG_TYPES.get(data_type, "UNDEFINED")  # Fetches type UNDEFINED if fails
+        type_name = TAG_TYPES.get(
+            data_type, "UNDEFINED"
+        )  # Fetches type UNDEFINED if fails
         doc_type = self._get_tag_type(tag=tag, endianness=endianness)
         doc_count = self._get_tag_count(tag=tag, endianness=endianness)
 
@@ -805,7 +807,9 @@ class JPEGParser(BaseParser):
                 value = self._parse_rational(content_bytes, endianness)
             elif type_name in ["ASCII", "UTF-8"]:
                 try:
-                    value = content_bytes.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+                    value = content_bytes.split(b"\x00", 1)[0].decode(
+                        "utf-8", errors="replace"
+                    )
                 except Exception:
                     value = content_bytes.hex()
             elif type_name == "UNDEFINED":
@@ -831,16 +835,17 @@ class JPEGParser(BaseParser):
                 "Content Value": value,
                 "IFD Tag Order": order,
             }
-        
-        inline_bytes = value.to_bytes(
-                    4, byteorder="little" if endianness == "<" else "big"
-                )
-        byteorder_str = "little" if endianness == "<" else "big"
 
+        inline_bytes = value.to_bytes(
+            4, byteorder="little" if endianness == "<" else "big"
+        )
+        byteorder_str = "little" if endianness == "<" else "big"
 
         if type_name in ["ASCII", "UTF-8"]:
             try:
-                decoded = inline_bytes.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+                decoded = inline_bytes.split(b"\x00", 1)[0].decode(
+                    "utf-8", errors="replace"
+                )
             except Exception:
                 decoded = inline_bytes.hex()
             content_value = decoded
@@ -864,9 +869,6 @@ class JPEGParser(BaseParser):
             "Content Value": content_value,
             "IFD Tag Order": order,
         }
-
-
-
 
     def _read_iptc_data(self, app13_bytes: bytes) -> dict:
         """
