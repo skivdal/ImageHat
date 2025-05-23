@@ -4,7 +4,7 @@ import time
 from imagehat.parsers import JPEGParser
 
 
-def collect_image_paths(base_path, extensions=(".jpg", ".jpeg", ".webp")):
+def collect_image_paths(base_path, extensions=(".jpg", ".jpeg")):
     image_paths = []
     for root, _, files in os.walk(base_path):
         for file in files:
@@ -17,8 +17,9 @@ def collect_image_paths(base_path, extensions=(".jpg", ".jpeg", ".webp")):
 start_time = time.time()
 
 # base_dir = r"D:\image_dataset\Images\Dresden_image_dataset"
-# base_dir = r"D:\image_dataset\Images\Divnoise_image_dataset"
-base_dir = r"datasets\scraped_news_images\downloaded_images"
+base_dir = r"D:\image_dataset\Images\Divnoise_image_dataset"
+# base_dir = r"datasets\scraped_news_images\downloaded_images"
+
 
 image_paths = collect_image_paths(base_dir)
 
@@ -26,8 +27,12 @@ image_paths = collect_image_paths(base_dir)
 dataset = {}
 for path in image_paths:
     try:
-        data = JPEGParser(path).get_complete_image_data()
-        dataset[path] = data
+        img = JPEGParser(path)
+        data = img.get_complete_image_data()
+        metrics = img.compute_conformity_metrics()
+
+        dataset[path] = {**data, "Metrics": metrics}
+
     except Exception as e:
         print(f"Failed to parse {path}: {e}")
 

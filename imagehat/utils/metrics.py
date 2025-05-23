@@ -1,5 +1,4 @@
 # Let's implement the EXIF Conformity Score (ECS) formula and all its components in a reusable Python module.
-import math
 
 # Constants for tag support levels
 SUPPORT_LEVEL_WEIGHTS = {"M": 1.0, "R": 0.6, "O": 0.3}
@@ -12,11 +11,13 @@ PENALTY_SCALE = {
     "U": lambda present, struct: 0.6 if not present else 0,
 }
 
+
 def get_baseline_order(tag_dict: dict) -> list[bytes]:
     """
     Sorts tag bytes to create a baseline order from a reversed tag dictionary.
     """
     return sorted(tag_dict.keys())
+
 
 def calculate_header_validity(e: int, t: int, b: int) -> float:
     return 0.4 * e + 0.4 * t + 0.2 * b
@@ -73,9 +74,10 @@ def kendall_tau_distance(order: list[int]) -> float:
     return 1 - inversions / total_pairs
 
 
-def calculate_s_TOS(all_tags: list[int], baseline: list[bytes]) -> float:
+def calculate_lazy_TOS(all_tags: list[int], baseline: list[bytes]) -> float:
     observed_order = [
-        tag["tag_id"] for tag in sorted(all_tags, key=lambda x: x.get("order", 0))
+        tag["tag_id"]
+        for tag in sorted(all_tags, key=lambda x: x.get("order", 0))
         if tag.get("tag_id") in baseline
     ]
 
@@ -87,7 +89,7 @@ def calculate_s_TOS(all_tags: list[int], baseline: list[bytes]) -> float:
     return kendall_tau_distance(indexed_order)
 
 
-def calculate_w_TOS(observed: list[int], baseline: list[dict]) -> float:
+def calculate_strict_TOS(observed: list[int], baseline: list[dict]) -> float:
     overlap = [tag for tag in observed if tag in baseline]
     if not overlap:
         return 0.0
@@ -101,4 +103,3 @@ def calculate_w_TOS(observed: list[int], baseline: list[dict]) -> float:
 
 def calculate_ECS(header_score: float, tvs: float, tos: float) -> float:
     return 0.3 * header_score + 0.3 * tvs + 0.4 * tos
-

@@ -1,8 +1,10 @@
 import os
 import os.path
 import struct
+from rich.pretty import pprint as rich_print
 from imagehat.parsers.base_parser import BaseParser
 from imagehat.identifiers.extensions import VALID_EXTENSIONS
+
 
 from imagehat.identifiers.jpeg_specific_identifiers import (
     IDENTIFIERS,
@@ -32,8 +34,8 @@ from imagehat.identifiers.iptc_attribute_information import (
 from imagehat.utils.metrics import (
     calculate_ECS,
     calculate_tag_validity_score,
-    calculate_s_TOS,
-    calculate_w_TOS,
+    calculate_lazy_TOS,
+    calculate_strict_TOS,
     calculate_header_validity,
 )
 
@@ -789,7 +791,7 @@ class JPEGParser(BaseParser):
         doc_type = self._get_tag_type(tag=tag, endianness=endianness)
         doc_count = self._get_tag_count(tag=tag, endianness=endianness)
 
-        size_of_type = TAG_TYPE_SIZE_BYTES.get(data_type, 1)
+        size_of_type = TAG_TYPE_SIZE_BYTES.get(type_name, 1)
         total_data_length = count * size_of_type
         absolute_offset = value + tiff_offset + self.marker_info["APP1"]["offset"]
 
@@ -1176,7 +1178,7 @@ class JPEGParser(BaseParser):
             image_files = [
                 os.path.join(images, f)
                 for f in all_files
-                if os.path.splitext(f)[1].lower() in JPEG_EXTENSIONS
+                if os.path.splitext(f)[1].lower() in VALID_EXTENSIONS
             ]
 
             skipped = len(all_files) - len(image_files)
@@ -1207,7 +1209,7 @@ class JPEGParser(BaseParser):
 
     @classmethod
     def _verbosed_output(cls, image_files: list, verbose: str) -> list[dict]:
-        """
+        """ute
         Helper method for get_image_datas(). Always includes conformity metrics.
 
         :param image_files: List of JPEGParser objects or image paths.
@@ -1342,10 +1344,10 @@ class JPEGParser(BaseParser):
                 tag for tag in all_tag_dicts if tag["tag_id"] in observed_exif
             ]
             weak_tos_scores["EXIF"] = round(
-                calculate_w_TOS(observed_exif, baseline_exif), 5
+                calculate_strict_TOS(observed_exif, baseline_exif), 5
             )
             strict_tos_scores["EXIF"] = round(
-                calculate_s_TOS(exif_tag_dicts, baseline_exif), 5
+                calculate_lazy_TOS(exif_tag_dicts, baseline_exif), 5
             )
 
             strict_tag_order_scores.append(strict_tos_scores["EXIF"])
@@ -1356,10 +1358,10 @@ class JPEGParser(BaseParser):
                 tag for tag in all_tag_dicts if tag["tag_id"] in observed_gps
             ]
             weak_tos_scores["GPS"] = round(
-                calculate_w_TOS(observed_gps, baseline_gps), 5
+                calculate_strict_TOS(observed_gps, baseline_gps), 5
             )
             strict_tos_scores["GPS"] = round(
-                calculate_s_TOS(gps_tag_dicts, baseline_gps), 5
+                calculate_lazy_TOS(gps_tag_dicts, baseline_gps), 5
             )
 
             strict_tag_order_scores.append(strict_tos_scores["EXIF"])
@@ -1370,10 +1372,10 @@ class JPEGParser(BaseParser):
                 tag for tag in all_tag_dicts if tag["tag_id"] in observed_interop
             ]
             weak_tos_scores["Interop"] = round(
-                calculate_w_TOS(observed_interop, baseline_interop), 5
+                calculate_strict_TOS(observed_interop, baseline_interop), 5
             )
             strict_tos_scores["Interop"] = round(
-                calculate_s_TOS(interop_tag_dicts, baseline_interop), 5
+                calculate_lazy_TOS(interop_tag_dicts, baseline_interop), 5
             )
 
             strict_tag_order_scores.append(strict_tos_scores["EXIF"])
@@ -1401,61 +1403,32 @@ class JPEGParser(BaseParser):
         return {
             "Header VAL": round(header_score, 5),
             "Tag VAL Score": round(tag_validity_score, 5),
-            "Weak Tag Order Score": weak_tos_scores,
-            "Strict Tag Order Score": strict_tos_scores,
+            "Lazy Tag Order Score": strict_tos_scores,
+            "Strict Tag Order Score": weak_tos_scores,
             "EXIF Conformity Score": ecs,
         }
 
+    @staticmethod
+    def pretty_print(data: dict):
+        """
+        Pretty-print a metadata dictionary using Rich.
 
-if __name__ == "__main__":
+        Args:
+            data (dict): The dictionary to pretty-print.
 
-    path = r"D:\image_dataset\Images\Dresden_image_dataset\Agfa_DC-504_0\Agfa_DC-504_0_1.JPG"
-    img = JPEGParser(path)
-    print(img.binary_repr[406:450])
-    print(img.get_complete_image_data())
+        Raises:
+            ValueError: If the input is not a dict or is empty.
+        """
+        if not isinstance(data, dict):
+            raise ValueError("Input to pretty_print_dict must be a dictionary.")
+        if not data:
+            raise ValueError("Cannot pretty print an empty dictionary.")
+        rich_print(data)
 
-# # NOTE Use the below lines to test
-# # file_path_img = r"tests\testsets\testset-small\Sony_DSC_H50_Sony_DSC-H50_0_47713.JPG"
-# # img = JPEGParser(file_path_img)
-# # meta = img_get_image_data()
-# # print(meta)
-# # print(meta["APP1 Info"]["EXIF Info"]["EXIF DATA"])
 
-# # # NOTE: Testing on all camera models in Dresden Dataset
-# testset_folder = os.path.join("tests", "testsets", "testset-small")
-# # testset_folder = os.path.join("tests", "testsets", "testset-large")
+# if __name__ == "__main__":
 
-# news_folder = os.path.join(
-#     "datasets", "scraped_news_images", "downloaded_images", "Document"
-# )
-# image_path = os.path.join(
-#     "datasets",
-#     "scraped_news_images",
-#     "downloaded_images",
-#     "Aftenposten",
-#     "000f8538-a096-4975-b2df-9d352d8d8379.jpg",
-# )
-# document_image = os.path.join(
-#     "datasets",
-#     "scraped_news_images",
-#     "downloaded_images",
-#     "Document",
-#     "2560px-protest-against-dakota-access-and-keystone-xl-pipelines-20170126-1641-1140x756.jpg",
-# )
-# document_image_alt = os.path.join(
-#     "datasets",
-#     "scraped_news_images",
-#     "downloaded_images",
-#     "Document",
-#     "trine-folmoe-selvportrett-20250315-133351-scaled-e1742816457408-554x430.jpg",
-# )
-# gpt_img = r"C:\Users\saete\Downloads\ChatGPT Image 16. apr. 2025, 03_09_46.png"
-
-# list_of_images = [
-#     os.path.join(testset_folder, fp) for fp in os.listdir(testset_folder)
-# ]
-
-# images = [JPEGParser(img) for img in list_of_images]
-
-# data = [img.get_complete_image_data() for img in images]
-# metrics = [img.compute_conformity_metrics() for img in images]
+# path = r"D:\image_dataset\Images\Dresden_image_dataset\Agfa_DC-504_0\Agfa_DC-504_0_1.JPG"
+# img = JPEGParser(path)
+# print(img.binary_repr[406:450])
+# print(img.get_complete_image_data())
