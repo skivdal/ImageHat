@@ -24,8 +24,8 @@ const logger = new duckdb.VoidLogger();
 const db = new duckdb.AsyncDuckDB(logger, worker);
 await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
-await db.registerFileURL("dataset.csv", "/dataset.csv", duckdb.DuckDBDataProtocol.HTTP, false);
-await (await db.connect()).insertCSVFromPath("dataset.csv", {
+await db.registerFileURL("updated_dataset.csv", "/updated_dataset.csv", duckdb.DuckDBDataProtocol.HTTP, false);
+await (await db.connect()).insertCSVFromPath("updated_dataset.csv", {
     schema: 'main',
     name: 'image_metadata',
     detect: true,
@@ -33,5 +33,21 @@ await (await db.connect()).insertCSVFromPath("dataset.csv", {
     delimiter: ',',
 });
 
-export { db };
 
+// Registering dataset for correct tag order
+// Important for clean usage and standard conformity
+
+await db.registerFileURL("exif_baseline_filtered.csv", "/exif_baseline_filtered.csv", duckdb.DuckDBDataProtocol.HTTP, false);
+await (await db.connect()).insertCSVFromPath("exif_baseline_filtered.csv", {
+    name: "exif_baseline",
+    detect: true,
+    header: true
+});
+
+//const conn = await db.connect();
+//const tables = await conn.query("SHOW TABLES;");
+//console.log("Tables loaded into DuckDB:", tables.toArray());
+
+
+
+export { db };

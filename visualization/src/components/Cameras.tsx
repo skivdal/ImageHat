@@ -3,10 +3,17 @@ import BarChart, {DataPoint} from "../BarChart.tsx";
 
 async function getTagNames() {
     const { db } = await import("../duckdb");
-
     const conn = await db.connect();
-    const r = await conn.query("SELECT DISTINCT tag_name FROM image_metadata ORDER BY tag_name;");
-    const tagNames = r.toArray().map(r => r.tag_name);
+
+    //const r = await conn.query("SELECT DISTINCT tag_name FROM image_metadata ORDER BY tag_name;");
+    //const tagNames = r.toArray().map(r => r.tag_name);
+    const result = await conn.query(`
+        SELECT "Tag Name" AS tag_name 
+        FROM exif_baseline 
+        ORDER BY CAST("Tag (Decimal)" AS INTEGER) ASC;
+    `);
+    const tagNames = result.toArray().map(r => r.tag_name);
+    await conn.close()
 
     return tagNames;
 }
