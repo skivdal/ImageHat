@@ -81,6 +81,23 @@ or if you are also using uv:
 uv pip install -r requirements.txt
 ```
 
+### Run the web server
+
+Run the FastAPI web server to allow for extracting EXIF metadata from uploaded images
+
+```sh
+export PYTHONPATH="$(pwd):$PYTHONPATH"
+uv run imagehat/web/app.py
+```
+
+Should start a server on `0.0.0.0:8000`.
+
+### Run the demo web frontend
+
+See [demo/README.md](demo/README.md).
+
+### Example usages
+
 #### Example Usage Single Image
 
 ```python
