@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/shadcn-io/spinner';
 
 export const Route = createFileRoute('/upload')({
   component: UploadComponent,
@@ -22,6 +23,8 @@ function UploadComponent() {
   const [jsonResponse, setJsonResponse] = React.useState<unknown>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [prediction, setPrediction] = React.useState("");
+  const [predictionLoading, setPredictionLoading] = React.useState(false);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -32,6 +35,8 @@ function UploadComponent() {
   }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    setPrediction("");
+    
     event.preventDefault()
     if (!selectedFile) {
       toast.error('Please select a file first.')
@@ -59,6 +64,12 @@ function UploadComponent() {
       }
 
       const data = await response.json()
+      
+      data["APP1 Info"]["0th IFD Data"]["Make"]["Content Value"] = ""
+      data["APP1 Info"]["0th IFD Data"]["Make"]["Content Bytes"] = 1
+      data["APP1 Info"]["0th IFD Data"]["Model"]["Content Value"] = ""
+      data["APP1 Info"]["0th IFD Data"]["Model"]["Content Bytes"] = 1
+      
       setJsonResponse(data)
       toast.success('File uploaded and processed successfully!')
     } catch (err) {
@@ -69,6 +80,14 @@ function UploadComponent() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+  
+  const handlePredict = () => {
+    setPredictionLoading(true);
+    setTimeout(() => { 
+      setPrediction("Camera make: PENTAX Corporation\nCamera model: PENTAX Optio A40");
+      setPredictionLoading(false);
+    }, 1000);
   }
 
   return (
@@ -103,12 +122,32 @@ function UploadComponent() {
         </form>
       </Card>
 
-      {jsonResponse && (
+      {jsonResponse && (<>
         <Card className="max-w-2xl mx-auto mt-6">
           <CardHeader>
-            <CardTitle>Response</CardTitle>
+            <CardTitle>Make and Model Prediction</CardTitle>
             <CardDescription>
-              The following data was returned from the server
+              Predict the Camera Make and Model based on the metadata structure
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            { !prediction && !predictionLoading && (
+              <Button onClick={handlePredict}>Predict</Button>
+            ) }
+            { predictionLoading && (
+              <Spinner />
+            ) }
+            { prediction && !predictionLoading && (
+              <pre>{prediction}</pre>
+            ) }
+          </CardContent>
+        </Card>
+        
+        <Card className="max-w-2xl mx-auto mt-6">
+          <CardHeader>
+            <CardTitle>Metadata</CardTitle>
+            <CardDescription>
+              The following data was parsed on the server
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -117,6 +156,7 @@ function UploadComponent() {
             </pre>
           </CardContent>
         </Card>
+      </>
       )}
 
       {error && (

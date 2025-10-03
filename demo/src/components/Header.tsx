@@ -8,7 +8,10 @@ export default function Header() {
           <Link to="/">Home</Link>
         </div>
         <div className="px-2 font-bold">
-          <Link to="/upload">Upload</Link>
+          <Link to="/upload">Extract Metadata</Link>
+        </div>
+        <div className="px-2 font-bold">
+          <Link to="/compare">Compare Metadata</Link>
         </div>
       </nav>
     </header>
